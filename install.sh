@@ -58,10 +58,15 @@ check_python() {
 }
 
 fetch_sources() {
-    local script_dir
-    script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+    # При установке через «wget ... | bash» BASH_SOURCE пуст — работаем от репозитория
+    local script_path="${BASH_SOURCE[0]:-}"
+    local script_dir=""
 
-    if [ -f "$script_dir/soika/__main__.py" ] && [ "$script_dir" != "$SOIKA_DIR" ]; then
+    if [ -n "$script_path" ] && [ -f "$script_path" ]; then
+        script_dir=$(cd "$(dirname "$script_path")" && pwd)
+    fi
+
+    if [ -n "$script_dir" ] && [ -f "$script_dir/soika/__main__.py" ] && [ "$script_dir" != "$SOIKA_DIR" ]; then
         green "==> Копирую исходники из $script_dir"
         mkdir -p "$SOIKA_DIR"
         cp -r "$script_dir/." "$SOIKA_DIR/"
