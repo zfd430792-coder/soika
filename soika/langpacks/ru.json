@@ -1,0 +1,18 @@
+{
+    "loading": "🪶 <b>Секунду...</b>",
+    "no_permission": "🚫 <b>Нет доступа к команде</b> <code>{}</code>",
+    "command_error": "🚫 <b>Команда</b> <code>{}</code> <b>упала</b>\n\n<pre><code>{}</code></pre>",
+    "watcher_error": "🚫 <b>Вотчер модуля</b> <code>{}</code> <b>упал</b>",
+    "flood_wait": "⏳ <b>Telegram просит подождать {} — команда отменена</b>",
+    "rate_limit": "🚦 <b>Слишком часто. Притормози на {} сек.</b>",
+    "module_not_found": "🔎 <b>Модуль</b> <code>{}</code> <b>не найден</b>",
+    "inline_unavailable": "🤖 <b>Инлайн-бот недоступен, отвечаю обычным сообщением</b>",
+    "inline_no_access": "🚫 Это не твоя кнопка",
+    "traceback_button": "📋 Трейсбек",
+    "close_button": "🗑 Закрыть",
+    "back_button": "⬅️ Назад",
+    "forward_button": "➡️ Вперёд",
+    "restart_started": "🪶 <b>Перезапускаюсь...</b>",
+    "restart_finished": "🪶 <b>Сойка перезапущена за {} сек.</b>",
+    "unknown_error": "🚫 <b>Что-то пошло не так</b>"
+}

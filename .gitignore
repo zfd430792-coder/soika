@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Данные конкретной установки — никогда не коммитим
+*.session
+*.session-journal
+config.json
+db-*.json
+db-*.json.rev*
+logs/
+loaded_modules/
+langpacks_custom/
+
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.idea/
+.vscode/
+*.log

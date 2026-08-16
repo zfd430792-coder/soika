@@ -1,0 +1,24 @@
+; Шаблон systemd-юнита. install.sh генерирует такой же файл сам,
+; подставляя реальные пути и пользователя.
+;
+;   sudo cp soika.service /etc/systemd/system/soika.service
+;   sudo systemctl daemon-reload && sudo systemctl enable --now soika
+
+[Unit]
+Description=Soika Telegram userbot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/soika
+ExecStart=/opt/soika/venv/bin/python -m soika
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

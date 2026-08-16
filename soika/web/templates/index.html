@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Сойка — панель</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+    <span class="logo">🪶</span>
+    <h1>Сойка</h1>
+    <span class="version">{{version}}</span>
+</header>
+
+<main>
+    <section id="credentials" hidden>
+        <h2>Шаг 1. Ключи Telegram</h2>
+        <p>
+            Зайди на <a href="https://my.telegram.org/apps" target="_blank" rel="noreferrer">my.telegram.org/apps</a>,
+            создай приложение и скопируй оттуда <code>api_id</code> и <code>api_hash</code>.
+        </p>
+        <form id="credentials-form">
+            <label>api_id<input name="api_id" inputmode="numeric" autocomplete="off" required></label>
+            <label>api_hash<input name="api_hash" autocomplete="off" required></label>
+            <button type="submit">Сохранить</button>
+        </form>
+        <p class="error" id="credentials-error"></p>
+    </section>
+
+    <section id="login" hidden>
+        <h2>Шаг 2. Вход в аккаунт</h2>
+
+        <div id="qr-block">
+            <p>Telegram → Настройки → Устройства → <b>Подключить устройство</b> — и наведи камеру:</p>
+            <img id="qr" alt="QR-код для входа">
+        </div>
+
+        <details id="phone-block">
+            <summary>Войти по номеру телефона</summary>
+            <form id="phone-form">
+                <label>Номер<input name="phone" placeholder="+79991234567" autocomplete="off"></label>
+                <button type="submit">Выслать код</button>
+            </form>
+        </details>
+
+        <form id="code-form" hidden>
+            <label>Код из Telegram<input name="code" inputmode="numeric" autocomplete="off"></label>
+            <button type="submit">Войти</button>
+        </form>
+
+        <form id="password-form" hidden>
+            <label>Пароль двухфакторки<input name="password" type="password" autocomplete="off"></label>
+            <button type="submit">Продолжить</button>
+        </form>
+
+        <p class="error" id="login-error"></p>
+    </section>
+
+    <section id="dashboard" hidden>
+        <h2>Панель</h2>
+        <div id="accounts"></div>
+
+        <h3>Логи</h3>
+        <pre id="logs">загружаю...</pre>
+
+        <button id="restart" class="danger">Перезапустить Сойку</button>
+    </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const show = (id, visible) => { $(id).hidden = !visible; };
+
+async function api(path, body) {
+    const options = body
+        ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+        : {};
+    const response = await fetch(path, options);
+    return response.json();
+}
+
+function renderAccounts(accounts) {
+    $("accounts").innerHTML = accounts.map((account) => `
+        <article class="card">
+            <h3>${account.name} <small>${account.id}</small></h3>
+            <p>Модулей: <b>${account.modules}</b> · команд: <b>${account.commands}</b> · префикс: <code>${account.prefix}</code></p>
+            <p>Инлайн-бот: ${account.bot ? "@" + account.bot : "—"}</p>
+            <details><summary>Список модулей</summary><p>${account.module_names.join(", ")}</p></details>
+        </article>
+    `).join("");
+}
+
+async function refreshLogs() {
+    if ($("dashboard").hidden) return;
+    const data = await api("/api/logs");
+    $("logs").textContent = (data.lines || []).join("\n");
+    $("logs").scrollTop = $("logs").scrollHeight;
+}
+
+async function poll() {
+    let data;
+    try {
+        data = await api("/api/status");
+    } catch (e) {
+        return;
+    }
+
+    show("credentials", data.state === "credentials");
+    show("login", data.state === "login");
+    show("dashboard", data.state === "ready");
+
+    if (data.state === "login") {
+        $("qr").src = data.qr ? "data:image/png;base64," + data.qr : "";
+        show("qr-block", data.stage === "qr");
+        show("phone-block", data.stage === "qr" || data.stage === "phone");
+        show("code-form", data.stage === "code");
+        show("password-form", data.stage === "password");
+        $("login-error").textContent = data.error || "";
+    }
+
+    if (data.state === "ready") {
+        renderAccounts(data.accounts || []);
+    }
+}
+
+$("credentials-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const result = await api("/api/credentials", {
+        api_id: form.get("api_id"),
+        api_hash: form.get("api_hash"),
+    });
+    $("credentials-error").textContent = result.error || "";
+    poll();
+});
+
+$("phone-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await api("/api/phone", { phone: new FormData(event.target).get("phone") });
+    poll();
+});
+
+$("code-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await api("/api/code", { code: new FormData(event.target).get("code") });
+    poll();
+});
+
+$("password-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await api("/api/password", { password: new FormData(event.target).get("password") });
+    poll();
+});
+
+$("restart").addEventListener("click", async () => {
+    $("restart").disabled = true;
+    await api("/api/restart", {});
+});
+
+poll();
+setInterval(poll, 2000);
+setInterval(refreshLogs, 5000);
+refreshLogs();
+</script>
+</body>
+</html>

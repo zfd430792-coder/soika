@@ -1,0 +1,50 @@
+[project]
+name = "soika"
+description = "Сойка — модульный Telegram-юзербот"
+readme = "README.md"
+requires-python = ">=3.10"
+dynamic = ["version"]
+dependencies = [
+    "telethon>=1.44,<2",
+    "aiogram>=3.30,<4",
+    "aiohttp>=3.10",
+    "aiohttp-jinja2>=1.6",
+    "jinja2>=3.1",
+    "qrcode>=8.0",
+    "pillow>=10.4",
+    "psutil>=6.0",
+    "GitPython>=3.1.43",
+    "meval>=2.5",
+    "cryptg>=0.5",
+]
+
+[project.optional-dependencies]
+redis = ["redis>=5.0"]
+
+[project.scripts]
+soika = "soika.__main__:entrypoint"
+
+[tool.setuptools.dynamic]
+version = { attr = "soika.version.__version_str__" }
+
+[tool.setuptools.packages.find]
+include = ["soika*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF", "BLE"]
+ignore = [
+    "E501",    # длину строк держит formatter
+    "B008",    # вызовы в дефолтах аргументов — обычный паттерн для конфигов
+    "RUF001",  # кириллица в строках — это норма для нас
+    "RUF002",
+    "RUF003",
+    "RUF012", # strings/config словари в классах модулей — идиома проекта
+    "SIM105",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"soika/modules/*" = ["F821"]  # в модулях доступны инжектируемые имена

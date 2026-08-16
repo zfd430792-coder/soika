@@ -1,0 +1,18 @@
+{
+    "loading": "🪶 <b>Just a second...</b>",
+    "no_permission": "🚫 <b>No access to command</b> <code>{}</code>",
+    "command_error": "🚫 <b>Command</b> <code>{}</code> <b>failed</b>\n\n<pre><code>{}</code></pre>",
+    "watcher_error": "🚫 <b>Watcher of module</b> <code>{}</code> <b>failed</b>",
+    "flood_wait": "⏳ <b>Telegram asks to wait {} — command cancelled</b>",
+    "rate_limit": "🚦 <b>Too fast. Cool down for {} sec.</b>",
+    "module_not_found": "🔎 <b>Module</b> <code>{}</code> <b>not found</b>",
+    "inline_unavailable": "🤖 <b>Inline bot is unavailable, answering with a plain message</b>",
+    "inline_no_access": "🚫 This button is not yours",
+    "traceback_button": "📋 Traceback",
+    "close_button": "🗑 Close",
+    "back_button": "⬅️ Back",
+    "forward_button": "➡️ Next",
+    "restart_started": "🪶 <b>Restarting...</b>",
+    "restart_finished": "🪶 <b>Soika restarted in {} sec.</b>",
+    "unknown_error": "🚫 <b>Something went wrong</b>"
+}
