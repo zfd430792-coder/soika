@@ -11,7 +11,7 @@ BRAND_EMOJI = "🪶"
 BOT_PREFIX = "soika"
 
 #: Репозиторий по умолчанию — из него тянутся обновления (.update)
-DEFAULT_REPO = "https://github.com/soika-userbot/soika"
+DEFAULT_REPO = "https://github.com/zfd430792-coder/soika"
 
-#: Репозиторий сторонних модулей для команды .ml
-DEFAULT_MODULES_REPO = "https://raw.githubusercontent.com/soika-userbot/modules/main"
+#: Каталог модулей для команды .ml — берётся из того же репозитория
+DEFAULT_MODULES_REPO = "https://raw.githubusercontent.com/zfd430792-coder/soika/main/modules"

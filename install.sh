@@ -7,7 +7,7 @@
 set -euo pipefail
 
 SOIKA_DIR="${SOIKA_DIR:-/opt/soika}"
-SOIKA_REPO="${SOIKA_REPO:-https://github.com/soika-userbot/soika}"
+SOIKA_REPO="${SOIKA_REPO:-https://github.com/zfd430792-coder/soika}"
 SERVICE_NAME="${SERVICE_NAME:-soika}"
 RUN_USER="${SUDO_USER:-$(id -un)}"
 
