@@ -17,17 +17,11 @@ import time
 import typing
 from pathlib import Path
 
-from telethon.errors import ChannelsTooMuchError
-from telethon.tl.functions.channels import CreateChannelRequest
-from telethon.tl.functions.folders import EditPeerFoldersRequest
-from telethon.tl.types import InputFolderPeer, Message
+from telethon.tl.types import Message
 
-from . import configuration, utils
+from . import channels, configuration, utils
 
 logger = logging.getLogger(__name__)
-
-ASSETS_TITLE = "soika-assets"
-ASSETS_ABOUT = "Служебное хранилище Сойки. Не удаляй этот канал."
 
 SAVE_DELAY = 0.7
 REVISION_INTERVAL = 60
@@ -330,44 +324,11 @@ class Database(dict):
     #  Хранилище файлов
     # ------------------------------------------------------------------ #
     async def assets_channel(self) -> typing.Any:
-        """Приватный канал, куда складываются файлы модулей и бэкапы."""
-        if self._assets_channel is not None:
-            return self._assets_channel
+        """Приватный канал, куда складываются файлы модулей."""
+        if self._assets_channel is None:
+            self._assets_channel = await channels.ensure_channel(self._client, self, "assets")
 
-        stored = self.get("soika.core", "assets_channel")
-
-        if stored:
-            try:
-                self._assets_channel = await self._client.get_entity(int(stored))
-                return self._assets_channel
-            except Exception:  # noqa: BLE001 — канал могли удалить, создадим заново
-                logger.warning("Канал-хранилище пропал, создаю новый")
-
-        try:
-            result = await self._client(
-                CreateChannelRequest(
-                    title=ASSETS_TITLE,
-                    about=ASSETS_ABOUT,
-                    megagroup=False,
-                )
-            )
-        except ChannelsTooMuchError:
-            logger.error("Слишком много каналов — хранилище не создать")
-            return None
-
-        channel = result.chats[0]
-        self.set("soika.core", "assets_channel", channel.id)
-        self._assets_channel = channel
-
-        with contextlib.suppress(Exception):
-            await self._client(
-                EditPeerFoldersRequest(
-                    [InputFolderPeer(await self._client.get_input_entity(channel), folder_id=1)]
-                )
-            )
-
-        logger.info("Создан канал-хранилище %s", ASSETS_TITLE)
-        return channel
+        return self._assets_channel
 
     async def store_asset(self, message: Message) -> int | None:
         channel = await self.assets_channel()

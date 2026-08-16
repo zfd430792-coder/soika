@@ -66,7 +66,7 @@ class HelpMod(loader.Module):
         if developer := getattr(module, "__meta__", {}).get("developer"):
             text += self.strings["developer"].format(utils.escape_html(developer))
 
-        await utils.answer(message, text)
+        await utils.answer_with_banner(message, text, utils.get_banner(module))
 
     async def _all_modules(self, message) -> None:
         modules = sorted(self.allmodules.modules, key=lambda module: str(module.name).lower())

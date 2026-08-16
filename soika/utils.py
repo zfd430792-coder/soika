@@ -358,6 +358,30 @@ async def answer_file(
     return result
 
 
+async def answer_with_banner(
+    message: Message | list[Message],
+    text: str,
+    banner: str | None = None,
+    **kwargs: typing.Any,
+) -> typing.Any:
+    """Ответить текстом, а если у модуля есть баннер — картинкой с подписью.
+
+    Баннер берётся из ``# meta banner:`` в шапке модуля. Если он не ссылка или
+    текст не влезает в подпись, спокойно отправляем обычное сообщение.
+    """
+    if banner and check_url(banner) and len(remove_html(text)) <= CAPTION_LIMIT:
+        with contextlib.suppress(Exception):
+            return await answer_file(message, banner, caption=text, **kwargs)
+
+    return await answer(message, text, **kwargs)
+
+
+def get_banner(module: typing.Any) -> str | None:
+    """Ссылка на баннер модуля из его метаданных."""
+    meta = getattr(module, "__meta__", None) or {}
+    return meta.get("banner") or meta.get("pic") or None
+
+
 async def send_typing(message: Message) -> None:
     with contextlib.suppress(Exception):
         async with message.client.action(message.peer_id, "typing"):
@@ -502,6 +526,7 @@ __all__ = [
     "MESSAGE_LIMIT",
     "answer",
     "answer_file",
+    "answer_with_banner",
     "array_sum",
     "censor",
     "check_url",
@@ -515,6 +540,7 @@ __all__ = [
     "get_args_html",
     "get_args_raw",
     "get_args_split_by",
+    "get_banner",
     "get_base_dir",
     "get_chat_id",
     "get_cpu_usage",

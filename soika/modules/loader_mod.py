@@ -154,13 +154,14 @@ class LoaderMod(loader.Module):
             for command in sorted(instance.commands)
         )
 
-        await utils.answer(
+        await utils.answer_with_banner(
             message,
             self.strings["loaded"].format(
                 utils.escape_html(str(instance.name)),
                 utils.escape_html(instance.get_module_doc()),
                 commands or self.strings["no_commands"],
             ),
+            utils.get_banner(instance),
         )
 
     @staticmethod

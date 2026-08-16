@@ -57,20 +57,39 @@ class _ColorFormatter(_PlainFormatter):
 
 
 class MemoryHandler(logging.Handler):
-    """Кольцевой буфер последних записей — из него ``.logs`` собирает файл."""
+    """Кольцевой буфер последних записей.
+
+    Из него ``.logs`` собирает файл, а модуль лог-канала забирает только то,
+    что появилось с прошлой отправки — поэтому у каждой записи есть номер.
+    """
 
     def __init__(self, capacity: int = 3000) -> None:
         super().__init__(logging.DEBUG)
-        self.entries: deque[tuple[int, str]] = deque(maxlen=capacity)
+        self.entries: deque[tuple[int, int, str]] = deque(maxlen=capacity)
+        self._counter = 0
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
-            self.entries.append((record.levelno, self.format(record)))
+            self._counter += 1
+            self.entries.append((self._counter, record.levelno, self.format(record)))
         except Exception:  # noqa: BLE001 — падать из-за логгера нельзя ни при каких условиях
             self.handleError(record)
 
+    @property
+    def last_id(self) -> int:
+        return self._counter
+
     def dumps(self, level: int = logging.INFO) -> list[str]:
-        return [text for lvl, text in self.entries if lvl >= level]
+        return [text for _, lvl, text in self.entries if lvl >= level]
+
+    def dumps_since(self, last_id: int, level: int = logging.WARNING) -> tuple[int, list[str]]:
+        """Записи новее ``last_id`` и не ниже уровня → (новый номер, строки)."""
+        fresh = [(seq, text) for seq, lvl, text in self.entries if seq > last_id and lvl >= level]
+
+        if not fresh:
+            return max(last_id, self._counter), []
+
+        return fresh[-1][0], [text for _, text in fresh]
 
     def clear(self) -> None:
         self.entries.clear()
