@@ -21,8 +21,11 @@ MODES = ["off", "daily", "interval"]
 TARGETS = ["channel", "saved"]
 TIME_RE = r"^([01]?\d|2[0-3]):[0-5]\d$"
 
+#: Набор интервалов как у Hikka — сетка по три кнопки в ряд
+INTERVAL_CHOICES = [1, 2, 4, 6, 8, 12, 24, 48, 168]
 TIME_CHOICES = ["00:00", "03:00", "06:00", "09:00", "12:00", "15:00", "18:00", "21:00"]
-INTERVAL_CHOICES = [1, 3, 6, 12, 24]
+
+BANNER = "https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/backup_banner.png"
 
 ASK_DELAY = 12
 
@@ -188,37 +191,20 @@ class BackupMod(loader.Module):
         )
 
     def _card_markup(self) -> list[list[dict]]:
+        """Первый экран — сетка интервалов, второй — время суток."""
         mode = self.config["mode"]
 
         def mark(active: bool, text: str) -> str:
             return f"✅ {text}" if active else text
 
-        rows: list[list[dict]] = [
-            [
-                {
-                    "text": mark(mode == "daily", "📅 Каждый день"),
-                    "callback": self._cb_mode,
-                    "args": ("daily",),
-                },
-                {
-                    "text": mark(mode == "interval", "⏱ Интервал"),
-                    "callback": self._cb_mode,
-                    "args": ("interval",),
-                },
-                {
-                    "text": mark(mode == "off", "🚫 Выкл"),
-                    "callback": self._cb_mode,
-                    "args": ("off",),
-                },
-            ]
-        ]
+        rows: list[list[dict]] = []
 
         if mode == "daily":
             current = self._normalized_time()
             rows += utils.chunks(
                 [
                     {
-                        "text": f"🔹 {choice}" if choice == current else choice,
+                        "text": mark(choice == current, choice),
                         "callback": self._cb_time,
                         "args": (choice,),
                     }
@@ -226,19 +212,50 @@ class BackupMod(loader.Module):
                 ],
                 4,
             )
-            rows.append([{"text": "✏️ Своё время", "callback": self._cb_custom_time}])
-        elif mode == "interval":
+            rows.append(
+                [
+                    {"text": "✏️ Своё время", "callback": self._cb_custom_time},
+                    {
+                        "text": "⏱ По интервалу",
+                        "callback": self._cb_mode,
+                        "args": ("interval",),
+                    },
+                ]
+            )
+        else:
             current = self.config["interval"]
             rows += utils.chunks(
                 [
                     {
-                        "text": f"🔹 {hours} ч" if hours == current else f"{hours} ч",
+                        "text": (
+                            f"✅ {hours} ч"
+                            if mode == "interval" and hours == current
+                            else f"🕰 {hours} ч"
+                        ),
                         "callback": self._cb_interval,
                         "args": (hours,),
                     }
                     for hours in INTERVAL_CHOICES
                 ],
-                5,
+                3,
+            )
+            rows.append(
+                [
+                    {
+                        "text": mark(mode == "off", "🚫 Никогда"),
+                        "callback": self._cb_mode,
+                        "args": ("off",),
+                    }
+                ]
+            )
+            rows.append(
+                [
+                    {
+                        "text": "🕒 В своё время суток",
+                        "callback": self._cb_mode,
+                        "args": ("daily",),
+                    }
+                ]
             )
 
         target = self.config["target"]
@@ -350,6 +367,7 @@ class BackupMod(loader.Module):
                 text,
                 message=None,
                 reply_markup=self._card_markup(),
+                photo=BANNER,
             ):
                 return
 
@@ -380,6 +398,7 @@ class BackupMod(loader.Module):
             text,
             message=message,
             reply_markup=self._card_markup(),
+            photo=BANNER,
         ):
             return
 
