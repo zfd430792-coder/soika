@@ -36,6 +36,9 @@ logger = logging.getLogger(__name__)
 CLEANUP_INTERVAL = 120
 AVATAR = configuration.repo_root() / "assets" / "bot_pfp.png"
 
+#: Кнопка «Бэкап базы» в приветствии — её ловит модуль бэкапа
+BACKUP_CALLBACK = "soika:backup"
+
 
 class InlineQueryWrapper:
     """Инлайн-запрос в виде, который ожидают модули Hikka."""
@@ -288,14 +291,17 @@ class InlineManager(UnitsMixin):
 
         args = button.get("args", ())
         kwargs = button.get("kwargs", {})
-
-        with contextlib.suppress(Exception):
-            await call.answer()
+        inline_call = InlineCall(self, unit, call)
 
         try:
-            await callback(InlineCall(self, unit, call), *args, **kwargs)
+            await callback(inline_call, *args, **kwargs)
         except Exception:
             logger.exception("Обработчик кнопки «%s» упал", button.get("text"))
+        finally:
+            # Если модуль ничего не ответил — гасим «часики» на кнопке сами
+            if not inline_call.answered:
+                with contextlib.suppress(Exception):
+                    await call.answer()
 
     async def _route_raw_callback(self, call: CallbackQuery) -> None:
         """Кнопки с произвольным ``data`` уходят во все callback-обработчики модулей."""
@@ -305,9 +311,21 @@ class InlineManager(UnitsMixin):
         unit = InlineUnit(id=utils.rand(10), kind="raw", owner=self._client.tg_id)
         unit.inline_message_id = call.inline_message_id
 
+        # Кнопка нажата под обычным сообщением бота — запомним адрес,
+        # иначе call.edit() не будет знать, что редактировать
+        if call.message is not None:
+            unit.bot_chat = call.message.chat.id
+            unit.bot_message = call.message.message_id
+
+        inline_call = InlineCall(self, unit, call)
+
         for handler in list(self.modules.callback_handlers.values()):
             with contextlib.suppress(Exception):
-                await handler(InlineCall(self, unit, call))
+                await handler(inline_call)
+
+        if not inline_call.answered:
+            with contextlib.suppress(Exception):
+                await call.answer()
 
     # ------------------------------------------------------------------ #
     #  Личка бота
@@ -353,6 +371,7 @@ class InlineManager(UnitsMixin):
                         switch_inline_query_current_chat="",
                     )
                 ],
+                [InlineKeyboardButton(text="🗄 Бэкап базы", callback_data=BACKUP_CALLBACK)],
                 [InlineKeyboardButton(text="🌐 Исходники", url=DEFAULT_REPO)],
             ]
         )

@@ -88,6 +88,10 @@ class InlineUnit:
     chat: int | None = None
     message_id: int | None = None
     inline_message_id: str | None = None
+
+    # если сообщение отправлено ботом напрямую (личка бота), а не через инлайн
+    bot_chat: int | None = None
+    bot_message: int | None = None
     created: float = field(default_factory=time.time)
     ttl: float = DEFAULT_TTL
     on_unload: typing.Callable | None = None
@@ -166,6 +170,9 @@ class InlineCall(InlineMessage):
         super().__init__(manager, unit)
         self._call = call
 
+        #: Telegram разрешает ответить на нажатие один раз — следим, кто это сделал
+        self.answered = False
+
     @property
     def from_user(self) -> typing.Any:
         return self._call.from_user
@@ -184,4 +191,5 @@ class InlineCall(InlineMessage):
         show_alert: bool = False,
         **kwargs: typing.Any,
     ) -> None:
+        self.answered = True
         await self._manager.answer_callback(self._call, text, show_alert=show_alert, **kwargs)

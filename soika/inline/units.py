@@ -335,6 +335,46 @@ class UnitsMixin:
 
         return await self.refresh_unit(unit)
 
+    async def send_pm_unit(
+        self,
+        chat_id: int,
+        text: str,
+        reply_markup: typing.Any = None,
+        *,
+        ttl: float = DEFAULT_TTL,
+        on_unload: typing.Callable | None = None,
+    ) -> InlineMessage | bool:
+        """Сообщение с кнопками прямо в личку бота (без инлайн-запроса)."""
+        if not self.init_complete:
+            return False
+
+        unit = InlineUnit(
+            id=utils.rand(10),
+            kind="form",
+            owner=self._client.tg_id,
+            text=text,
+            buttons=normalize_buttons(reply_markup),
+            ttl=ttl,
+            on_unload=on_unload,
+        )
+        self._units[unit.id] = unit
+
+        try:
+            sent = await self.bot.send_message(
+                chat_id,
+                text,
+                parse_mode="HTML",
+                reply_markup=self.build_markup(unit),
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.error("Не смог написать в личку бота: %s", e)
+            self._units.pop(unit.id, None)
+            return False
+
+        unit.bot_chat = sent.chat.id
+        unit.bot_message = sent.message_id
+        return InlineMessage(self, unit)
+
     async def refresh_unit(self, unit: InlineUnit) -> bool:
         from aiogram.types import InputMediaPhoto
 
@@ -342,19 +382,30 @@ class UnitsMixin:
         body = self.unit_text(unit)
         picture = self.unit_photo(unit)
 
+        # Сообщение живёт либо как инлайн-результат, либо как обычное
+        # сообщение бота в личке — редактируются они по-разному
+        address = (
+            {"inline_message_id": unit.inline_message_id}
+            if unit.inline_message_id
+            else {"chat_id": unit.bot_chat, "message_id": unit.bot_message}
+        )
+
+        if not any(address.values()):
+            return False
+
         try:
             if picture:
                 await self.bot.edit_message_media(
-                    inline_message_id=unit.inline_message_id,
                     media=InputMediaPhoto(media=picture, caption=body[:1024], parse_mode="HTML"),
                     reply_markup=markup,
+                    **address,
                 )
             else:
                 await self.bot.edit_message_text(
-                    inline_message_id=unit.inline_message_id,
                     text=body,
                     parse_mode="HTML",
                     reply_markup=markup,
+                    **address,
                 )
         except Exception as e:  # noqa: BLE001 — «message is not modified» и т. п.
             logger.debug("Не смог обновить инлайн-сообщение %s: %s", unit.id, e)
@@ -372,6 +423,11 @@ class UnitsMixin:
 
         if not delete_message:
             return
+
+        if unit.bot_chat and unit.bot_message:
+            with contextlib.suppress(Exception):
+                await self.bot.delete_message(unit.bot_chat, unit.bot_message)
+                return
 
         if unit.chat and unit.message_id:
             with contextlib.suppress(Exception):
