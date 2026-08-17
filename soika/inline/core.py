@@ -23,9 +23,10 @@ from aiogram.types import (
     LinkPreviewOptions,
 )
 from aiogram.types import Message as BotMessage
+from telethon.tl.functions.contacts import UnblockRequest
 
 from .. import configuration, utils
-from ..version import BRAND, BRAND_EMOJI
+from ..version import BRAND, BRAND_EMOJI, DEFAULT_REPO, __version_str__
 from . import token as token_tools
 from .types import BotCreationError, InlineCall, InlineUnit, normalize_buttons
 from .units import NAV_CLOSE, NAV_NEXT, NAV_NOOP, NAV_PREV, UnitsMixin
@@ -111,6 +112,36 @@ class InlineManager(UnitsMixin):
         self.init_complete = True
 
         logger.info("Инлайн-бот @%s на связи", self.bot_username)
+        utils.spawn(self.greet_owner())
+        return True
+
+    async def greet_owner(self, *, force: bool = False) -> bool:
+        """Написать боту /start за пользователя, чтобы тот прислал приветствие.
+
+        Иначе бот молчит, пока его не найдут в поиске и не нажмут «Start» —
+        а так диалог с ботом появляется сам сразу после установки.
+        """
+        if not force and self._db.get("soika.inline", "greeted"):
+            return False
+
+        await asyncio.sleep(2)
+
+        try:
+            with contextlib.suppress(Exception):
+                await self._client(UnblockRequest(self.bot_username))
+
+            sent = await self._client.send_message(self.bot_username, "/start")
+            self._db.set("soika.inline", "greeted", True)
+
+            # Команду убираем — в диалоге остаётся только ответ бота
+            await asyncio.sleep(2)
+
+            with contextlib.suppress(Exception):
+                await sent.delete()
+        except Exception:
+            logger.exception("Не смог поздороваться с собственным ботом")
+            return False
+
         return True
 
     async def _run_polling(self) -> None:
@@ -289,24 +320,41 @@ class InlineManager(UnitsMixin):
             )
             return
 
+        await message.answer(self.welcome_text(), reply_markup=self.welcome_markup())
+
+    def welcome_text(self) -> str:
         prefix = self._db.get("soika.settings", "prefixes", ["."])[0]
-        await message.answer(
-            f"{BRAND_EMOJI} <b>Привет! Я — инлайн-бот {BRAND}.</b>\n\n"
-            "Меня создали автоматически: через меня работают кнопки, галереи, "
-            "инлайн-режим и вывод ошибок.\n\n"
-            f"Все команды пиши в Telegram с префиксом <code>{prefix}</code>, "
-            f"например <code>{prefix}help</code>.\n"
-            "Меня из чатов удалять не надо — сломаются кнопки.",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="📚 Список команд",
-                            switch_inline_query_current_chat="",
-                        )
-                    ]
-                ]
-            ),
+        owner = utils.get_display_name(self._client.soika_me)
+
+        modules = len(self.modules.modules) if self.modules else 0
+        commands = len(self.modules.commands) if self.modules else 0
+
+        return (
+            f"{BRAND_EMOJI} <b>{BRAND} {__version_str__} на связи</b>\n\n"
+            f"Это твой личный инлайн-бот, я создал его сам. Через меня работают:\n"
+            "▫️ кнопки и формы в чатах\n"
+            "▫️ галереи и постраничные списки\n"
+            "▫️ инлайн-режим — набери <code>@"
+            f"{self.bot_username}</code> в любом чате\n"
+            "▫️ трейсбеки упавших команд\n\n"
+            f"<b>Аккаунт:</b> {utils.escape_html(owner)}\n"
+            f"<b>Модулей:</b> {modules} · <b>команд:</b> {commands}\n"
+            f"<b>Префикс:</b> <code>{prefix}</code>\n\n"
+            f"Команды пиши в самом Telegram, например <code>{prefix}help</code>.\n"
+            "Меня не удаляй и не блокируй — сломаются кнопки."
+        )
+
+    def welcome_markup(self) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="📚 Показать команды",
+                        switch_inline_query_current_chat="",
+                    )
+                ],
+                [InlineKeyboardButton(text="🌐 Исходники", url=DEFAULT_REPO)],
+            ]
         )
 
     async def _on_message(self, message: BotMessage) -> None:
