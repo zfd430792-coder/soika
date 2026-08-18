@@ -1,7 +1,13 @@
 """Меню бота: разделы «Логи», «Модули» и «Настройки» кнопками в личке."""
 
 from .. import channels, loader, utils
-from ..inline.core import LOGS_CALLBACK, MENU_CALLBACK, MODULES_CALLBACK, SETTINGS_CALLBACK
+from ..inline.core import (
+    LANG_CALLBACK,
+    LOGS_CALLBACK,
+    MENU_CALLBACK,
+    MODULES_CALLBACK,
+    SETTINGS_CALLBACK,
+)
 
 SETTINGS = "soika.settings"
 CORE = "soika.core"
@@ -73,6 +79,10 @@ class BotMenuMod(loader.Module):
     @loader.callback_handler()
     async def menu_callback_handler(self, call):
         """Разделы меню бота"""
+        if call.data.startswith(LANG_CALLBACK):
+            await self._switch_lang(call, call.data[len(LANG_CALLBACK) :])
+            return
+
         routes = {
             MENU_CALLBACK: self._menu,
             LOGS_CALLBACK: self._logs,
@@ -83,6 +93,21 @@ class BotMenuMod(loader.Module):
         if handler := routes.get(call.data):
             await call.answer()
             await handler(call)
+
+    async def _switch_lang(self, call, lang: str) -> None:
+        """Кнопки языка на приветствии — переключают и перерисовывают его же."""
+        translator = self.client.translator
+
+        if lang not in translator.available:
+            await call.answer(self.strings["no_module"].format(lang), show_alert=True)
+            return
+
+        translator.set_lang(lang)
+        await call.answer(translator.gettext("lang_switched"))
+        await call.edit(
+            self.inline.welcome_text(),
+            reply_markup=self.inline.welcome_markup(),
+        )
 
     async def _menu(self, call) -> None:
         await call.edit(self.inline.menu_text(), reply_markup=self.inline.menu_markup())

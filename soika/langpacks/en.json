@@ -14,5 +14,20 @@
     "forward_button": "➡️ Next",
     "restart_started": "🪶 <b>Restarting...</b>",
     "restart_finished": "🪶 <b>Soika restarted in {} sec.</b>",
-    "unknown_error": "🚫 <b>Something went wrong</b>"
+    "unknown_error": "🚫 <b>Something went wrong</b>",
+    "bot_welcome_new": "🪶 <b>Hi. Your userbot Soika is installed.</b>",
+    "bot_welcome_restart": "🪶 <b>Soika restarted and is back online.</b>",
+    "bot_guide": "📖 <b>Quick guide:</b>\n<b>1.</b> <code>{prefix}help</code> — list of modules\n<b>2.</b> <code>{prefix}help name</code> — what a module does\n<b>3.</b> <code>{prefix}dlmod link</code> — install a module from a link\n<b>4.</b> <code>{prefix}loadmod</code> replying to a .py file — install your own\n<b>5.</b> <code>{prefix}unloadmod name</code> — unload a module",
+    "bot_compat": "💡 Modules for <b>Hikka</b>, FTG, GeekTG and Dragon work as is.",
+    "bot_backup_hint": "🗄 Backups and logs are configured with the buttons below or via <code>{prefix}backups</code>.",
+    "bot_status": "📟 <b>Account:</b> {owner}\n🧩 <b>Modules:</b> {modules} · <b>commands:</b> {commands}\n⌨️ <b>Prefix:</b> <code>{prefix}</code> · <b>uptime:</b> <code>{uptime}</code>\n🤖 <b>Inline:</b> <code>@{bot}</code> in any chat",
+    "bot_menu_title": "🪶 <b>Soika {version}</b>\n<i>your personal userbot companion — buttons, galleries, logs</i>",
+    "bot_menu_hint": "<i>Pick a section below.</i>",
+    "btn_commands": "📚 Commands",
+    "btn_backup": "🗄 Backup",
+    "btn_logs": "📜 Logs",
+    "btn_modules": "🧩 Modules",
+    "btn_settings": "⚙️ Settings",
+    "btn_sources": "🌐 Sources",
+    "lang_switched": "Interface language switched"
 }

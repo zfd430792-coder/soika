@@ -40,6 +40,12 @@ BACKUP_CALLBACK = "soika:backup"
 LOGS_CALLBACK = "soika:logs"
 MODULES_CALLBACK = "soika:modules"
 SETTINGS_CALLBACK = "soika:settings"
+LANG_CALLBACK = "soika:lang:"
+
+#: Картинка приветствия — лежит в репозитории, отдаётся по raw-ссылке
+WELCOME_BANNER = (
+    "https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/welcome_banner.png"
+)
 
 #: Сколько раз пробуем перебить чужой getUpdates после перезапуска
 POLLING_ATTEMPTS = 24
@@ -383,62 +389,101 @@ class InlineManager(UnitsMixin):
     #  Личка бота
     # ------------------------------------------------------------------ #
     async def _on_start(self, message: BotMessage) -> None:
-        await self.send_pm_unit(message.chat.id, self.menu_text(), self.menu_markup())
+        await self.send_welcome(message.chat.id)
 
     async def announce_restart(self) -> None:
-        """Отмечаемся в личке при каждом запуске — видно, что бот поднялся."""
+        """Приветствие при каждом запуске — сразу видно, что бот поднялся."""
         await asyncio.sleep(6)
 
-        # На самом первом запуске приветствие пришлёт greet_owner
+        # На самом первом запуске приветствие придёт в ответ на /start
         if not self._db.get("soika.inline", "greeted"):
             return
 
         with contextlib.suppress(Exception):
-            await self.send_pm_unit(
-                self._client.tg_id,
-                f"{BRAND_EMOJI} <b>{BRAND} перезапущена и на связи</b>\n\n"
-                f"{self.menu_text(header=False)}",
-                self.menu_markup(),
-            )
+            await self.send_welcome(self._client.tg_id, restarted=True)
 
-    def menu_text(self, *, header: bool = True) -> str:
-        """Тело меню бота: кто, сколько модулей, как звать."""
-        prefix = self._db.get("soika.settings", "prefixes", ["."])[0]
-        owner = utils.get_display_name(self._client.soika_me)
+    async def send_welcome(self, chat_id: int, *, restarted: bool = False) -> None:
+        """Баннер отдельным сообщением, следом — приветствие с кнопками.
 
-        modules = len(self.modules.modules) if self.modules else 0
-        commands = len(self.modules.commands) if self.modules else 0
+        Раздельно, потому что подпись к картинке в Telegram ограничена
+        1024 символами, а гайду там тесно.
+        """
+        with contextlib.suppress(Exception):
+            await self.bot.send_photo(chat_id, WELCOME_BANNER)
 
-        title = (
-            f"{BRAND_EMOJI} <b>{BRAND} {__version_str__}</b>\n"
-            "<i>твой личный бот юзербота — кнопки, галереи, инлайн, логи</i>\n\n"
-            if header
-            else ""
+        await self.send_pm_unit(
+            chat_id,
+            self.welcome_text(restarted=restarted),
+            self.welcome_markup(),
         )
 
-        return (
-            f"{title}"
-            f"<b>Аккаунт:</b> {utils.escape_html(owner)}\n"
-            f"<b>Модулей:</b> {modules} · <b>команд:</b> {commands}\n"
-            f"<b>Префикс:</b> <code>{prefix}</code> · <b>аптайм:</b> "
-            f"<code>{utils.formatted_uptime()}</code>\n"
-            f"<b>Инлайн:</b> <code>@{self.bot_username}</code> в любом чате\n\n"
-            "<i>Выбирай раздел кнопками ниже.</i>"
+    def _t(self, key: str, **kwargs: typing.Any) -> str:
+        """Строка ядра на языке пользователя (языковые паки в langpacks/)."""
+        translator = getattr(self._client, "translator", None)
+        text = translator.gettext(key) if translator else key
+        return text.format(**kwargs) if kwargs else text
+
+    @property
+    def prefix(self) -> str:
+        return self._db.get("soika.settings", "prefixes", ["."])[0]
+
+    def status_block(self) -> str:
+        """Строки состояния — одинаковые в приветствии и в меню."""
+        return self._t(
+            "bot_status",
+            owner=utils.escape_html(utils.get_display_name(self._client.soika_me)),
+            modules=len(self.modules.modules) if self.modules else 0,
+            commands=len(self.modules.commands) if self.modules else 0,
+            prefix=self.prefix,
+            uptime=utils.formatted_uptime(),
+            bot=self.bot_username,
+        )
+
+    def welcome_text(self, *, restarted: bool = False) -> str:
+        header = self._t("bot_welcome_restart" if restarted else "bot_welcome_new")
+
+        return "\n\n".join(
+            (
+                header,
+                self._t("bot_guide", prefix=self.prefix),
+                self._t("bot_compat") + "\n" + self._t("bot_backup_hint", prefix=self.prefix),
+                self.status_block(),
+            )
+        )
+
+    def menu_text(self) -> str:
+        """Короткий экран меню — без гайда, только состояние."""
+        return "\n\n".join(
+            (
+                self._t("bot_menu_title", version=__version_str__),
+                self.status_block(),
+                self._t("bot_menu_hint"),
+            )
         )
 
     def menu_markup(self) -> list[list[dict]]:
         """Главное меню. Разделы обрабатывают модули по callback_data."""
         return [
             [
-                {"text": "📚 Команды", "input": ""},
-                {"text": "🗄 Бэкап", "data": BACKUP_CALLBACK},
+                {"text": self._t("btn_commands"), "input": ""},
+                {"text": self._t("btn_backup"), "data": BACKUP_CALLBACK},
             ],
             [
-                {"text": "📜 Логи", "data": LOGS_CALLBACK},
-                {"text": "🧩 Модули", "data": MODULES_CALLBACK},
+                {"text": self._t("btn_logs"), "data": LOGS_CALLBACK},
+                {"text": self._t("btn_modules"), "data": MODULES_CALLBACK},
             ],
-            [{"text": "⚙️ Настройки", "data": SETTINGS_CALLBACK}],
-            [{"text": "🌐 Исходники", "url": DEFAULT_REPO}],
+            [{"text": self._t("btn_settings"), "data": SETTINGS_CALLBACK}],
+            [{"text": self._t("btn_sources"), "url": DEFAULT_REPO}],
+        ]
+
+    def welcome_markup(self) -> list[list[dict]]:
+        """Меню плюс выбор языка — как на приветствии Hikka."""
+        return [
+            *self.menu_markup(),
+            [
+                {"text": "🇷🇺 Русский", "data": f"{LANG_CALLBACK}ru"},
+                {"text": "🇬🇧 English", "data": f"{LANG_CALLBACK}en"},
+            ],
         ]
 
     async def _on_message(self, message: BotMessage) -> None:
