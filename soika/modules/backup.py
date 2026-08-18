@@ -1,6 +1,6 @@
 """Резервные копии базы: вручную, по времени суток или по интервалу.
 
-Расписание настраивается кнопками — командой ``.backups``, из приветствия бота
+Расписание настраивается кнопками — командой ``.backups``, из меню бота
 или при первом запуске, когда Сойка сама спрашивает, когда бэкапить.
 """
 
@@ -40,24 +40,22 @@ class BackupMod(loader.Module):
         "no_file": "🚫 <b>Ответь на файл с бэкапом</b>",
         "restored": "✅ <b>База восстановлена. Перезапусти Сойку:</b> <code>{}restart</code>",
         "bad_file": "🚫 <b>Это не похоже на бэкап базы</b>",
-        "card": (
-            "🗄 <b>Бэкап базы</b>\n\n"
-            "<b>Когда:</b> {mode}\n"
-            "<b>Куда:</b> {target}\n"
-            "<b>Последний:</b> {last}"
+        "title": "🗄 <b>Бэкап базы</b>",
+        "title_first_run": (
+            "🗄 <b>Настроим бэкап базы?</b>\n"
+            "<i>В базе — настройки, модули и доступы. Без копии всё это "
+            "уедет вместе с сервером.</i>"
         ),
-        "first_run": (
-            "🗄 <b>Настроим бэкап базы?</b>\n\n"
-            "В базе живут настройки, список модулей, доступы и всё, что "
-            "накопят модули. Если сервер умрёт, без бэкапа это не вернуть.\n\n"
-            "Сейчас: {mode}, {target}.\n"
-            "Поменяй кнопками ниже или оставь как есть."
-        ),
-        "mode_off": "выключено, только вручную",
+        "mode_line": "🕒 <b>Когда:</b> {}",
+        "last_line": "🕘 <b>Последний:</b> {}",
+        "keep_line": "📦 <b>Копий в канале:</b> {}",
+        "now_line": "<i>На сервере сейчас {}</i>",
+        "mode_off": "не делается, только вручную",
         "mode_daily": "каждый день в <code>{}</code>",
         "mode_interval": "каждые <code>{}</code> ч.",
-        "target_channel": "в канал <a href=\"{}\">soika-backups</a>",
-        "target_saved": "в «Избранное»",
+        "target_channel": "📢 <b>Куда:</b> <a href=\"{}\">soika-backups</a>",
+        "target_channel_plain": "📢 <b>Куда:</b> в канал soika-backups",
+        "target_saved": "💾 <b>Куда:</b> в «Избранное»",
         "never": "<i>ещё не делался</i>",
         "set_daily": "✅ <b>Бэкап каждый день в</b> <code>{}</code>",
         "set_interval": "✅ <b>Бэкап каждые</b> <code>{}</code> <b>ч.</b>",
@@ -71,9 +69,17 @@ class BackupMod(loader.Module):
         "ask_time": "Пришли время в формате ЧЧ:ММ в личку боту @{}",
         "bad_time": "🚫 Нужно время в формате ЧЧ:ММ, например 03:30",
         "time_set": "✅ Бэкап каждый день в {}",
-        "doing": "⏳ Делаю бэкап...",
         "done": "✅ Бэкап отправлен",
         "failed": "🚫 Не получилось: {}",
+        "btn_custom": "✏️ Своё",
+        "btn_by_interval": "⏱ По интервалу",
+        "btn_by_time": "🕒 По времени",
+        "btn_off": "Выключить",
+        "btn_channel": "В канал",
+        "btn_saved": "В «Избранное»",
+        "btn_open": "📂 Открыть канал",
+        "btn_now": "⬇️ Бэкап сейчас",
+        "btn_close": "🗑 Закрыть",
     }
 
     strings_en = {
@@ -81,23 +87,22 @@ class BackupMod(loader.Module):
         "no_file": "🚫 <b>Reply to a backup file</b>",
         "restored": "✅ <b>Database restored. Restart Soika:</b> <code>{}restart</code>",
         "bad_file": "🚫 <b>This does not look like a backup</b>",
-        "card": (
-            "🗄 <b>Database backup</b>\n\n"
-            "<b>When:</b> {mode}\n"
-            "<b>Where:</b> {target}\n"
-            "<b>Last one:</b> {last}"
+        "title": "🗄 <b>Database backup</b>",
+        "title_first_run": (
+            "🗄 <b>Let's set up backups</b>\n"
+            "<i>The database keeps settings, modules and access lists. "
+            "Without a copy it is gone with the server.</i>"
         ),
-        "first_run": (
-            "🗄 <b>Let's set up backups</b>\n\n"
-            "The database keeps settings, modules and access lists. "
-            "Without a backup it is gone with the server.\n\n"
-            "Now: {mode}, {target}."
-        ),
-        "mode_off": "off, manual only",
+        "mode_line": "🕒 <b>When:</b> {}",
+        "last_line": "🕘 <b>Last one:</b> {}",
+        "keep_line": "📦 <b>Copies kept:</b> {}",
+        "now_line": "<i>Server time is {}</i>",
+        "mode_off": "never, manual only",
         "mode_daily": "every day at <code>{}</code>",
         "mode_interval": "every <code>{}</code> h.",
-        "target_channel": "to <a href=\"{}\">soika-backups</a>",
-        "target_saved": "to Saved Messages",
+        "target_channel": "📢 <b>Where:</b> <a href=\"{}\">soika-backups</a>",
+        "target_channel_plain": "📢 <b>Where:</b> soika-backups channel",
+        "target_saved": "💾 <b>Where:</b> Saved Messages",
         "never": "<i>never</i>",
         "set_daily": "✅ <b>Backup every day at</b> <code>{}</code>",
         "set_interval": "✅ <b>Backup every</b> <code>{}</code> <b>h.</b>",
@@ -106,9 +111,17 @@ class BackupMod(loader.Module):
         "ask_time": "Send the time as HH:MM to @{}",
         "bad_time": "🚫 Time must look like 03:30",
         "time_set": "✅ Backup every day at {}",
-        "doing": "⏳ Backing up...",
         "done": "✅ Backup sent",
         "failed": "🚫 Failed: {}",
+        "btn_custom": "✏️ Custom",
+        "btn_by_interval": "⏱ By interval",
+        "btn_by_time": "🕒 By time",
+        "btn_off": "Turn off",
+        "btn_channel": "To channel",
+        "btn_saved": "To Saved",
+        "btn_open": "📂 Open channel",
+        "btn_now": "⬇️ Back up now",
+        "btn_close": "🗑 Close",
     }
 
     config = loader.ModuleConfig(
@@ -146,26 +159,19 @@ class BackupMod(loader.Module):
 
     def __init__(self) -> None:
         self._channel = None
-
-    def _inline_ready(self) -> bool:
-        return self.inline is not None and self.inline.init_complete
+        self._link = ""
 
     async def client_ready(self, client, db):
         # При первой установке спрашиваем про бэкап — молча его не включаем
         if not self.get("setup_asked"):
             utils.spawn(self._ask_on_first_run())
 
+    def _inline_ready(self) -> bool:
+        return self.inline is not None and self.inline.init_complete
+
     # ------------------------------------------------------------------ #
     #  Карточка настроек
     # ------------------------------------------------------------------ #
-    async def _describe_target(self) -> str:
-        if self.config["target"] != "channel":
-            return self.strings["target_saved"]
-
-        channel = await self._ensure_channel()
-        link = await channels.channel_link(self.client, channel) if channel else "—"
-        return self.strings["target_channel"].format(link)
-
     def _describe_mode(self) -> str:
         mode = self.config["mode"]
 
@@ -177,48 +183,71 @@ class BackupMod(loader.Module):
 
         return self.strings["mode_off"]
 
-    async def _card_text(self, template: str = "card") -> str:
+    async def _describe_target(self) -> str:
+        if self.config["target"] != "channel":
+            return self.strings["target_saved"]
+
+        link = await self._channel_link()
+
+        if not link:
+            return self.strings["target_channel_plain"]
+
+        return self.strings["target_channel"].format(link)
+
+    async def _card_text(self, *, first_run: bool = False) -> str:
         last = self.get("last_backup", 0)
 
-        return self.strings[template].format(
-            mode=self._describe_mode(),
-            target=await self._describe_target(),
-            last=(
-                time.strftime("%d.%m.%Y %H:%M", time.localtime(last))
+        lines = [
+            self.strings["mode_line"].format(self._describe_mode()),
+            await self._describe_target(),
+            self.strings["last_line"].format(
+                time.strftime("%d.%m.%Y, %H:%M", time.localtime(last))
                 if last
                 else self.strings["never"]
             ),
-        )
+        ]
 
-    def _card_markup(self) -> list[list[dict]]:
-        """Первый экран — сетка интервалов, второй — время суток."""
+        # Сколько копий хранить — имеет смысл только для канала
+        if self.config["target"] == "channel":
+            lines.append(self.strings["keep_line"].format(self.config["keep"]))
+
+        lines += ["", self.strings["now_line"].format(time.strftime("%H:%M"))]
+        title = self.strings["title_first_run" if first_run else "title"]
+
+        return title + "\n\n" + "\n".join(lines)
+
+    async def _card_markup(self) -> list[list[dict]]:
+        """Первый экран — сетка интервалов, второй — время суток.
+
+        Маркер выбранного пункта заменяет эмодзи, а не добавляется к нему —
+        иначе кнопки в ряду разъезжаются по ширине.
+        """
         mode = self.config["mode"]
-
-        def mark(active: bool, text: str) -> str:
-            return f"✅ {text}" if active else text
-
         rows: list[list[dict]] = []
 
         if mode == "daily":
             current = self._normalized_time()
-            rows += utils.chunks(
-                [
-                    {
-                        "text": mark(choice == current, choice),
-                        "callback": self._cb_time,
-                        "args": (choice,),
-                    }
-                    for choice in TIME_CHOICES
-                ],
-                4,
-            )
+            choices = [
+                {
+                    "text": f"{'✅' if choice == current else '🕒'} {choice}",
+                    "callback": self._cb_time,
+                    "args": (choice,),
+                }
+                for choice in TIME_CHOICES
+            ]
+            choices.append({"text": self.strings["btn_custom"], "callback": self._cb_custom_time})
+            rows += utils.chunks(choices, 3)
             rows.append(
                 [
-                    {"text": "✏️ Своё время", "callback": self._cb_custom_time},
                     {
-                        "text": "⏱ По интервалу",
+                        "text": self.strings["btn_by_interval"],
                         "callback": self._cb_mode,
                         "args": ("interval",),
+                    },
+                    {
+                        "text": f"🚫 {self.strings['btn_off']}",
+                        "callback": self._cb_mode,
+                        "args": ("off",),
                     },
                 ]
             )
@@ -228,9 +257,7 @@ class BackupMod(loader.Module):
                 [
                     {
                         "text": (
-                            f"✅ {hours} ч"
-                            if mode == "interval" and hours == current
-                            else f"🕰 {hours} ч"
+                            f"{'✅' if mode == 'interval' and hours == current else '🕰'} {hours} ч"
                         ),
                         "callback": self._cb_interval,
                         "args": (hours,),
@@ -242,19 +269,15 @@ class BackupMod(loader.Module):
             rows.append(
                 [
                     {
-                        "text": mark(mode == "off", "🚫 Никогда"),
-                        "callback": self._cb_mode,
-                        "args": ("off",),
-                    }
-                ]
-            )
-            rows.append(
-                [
-                    {
-                        "text": "🕒 В своё время суток",
+                        "text": self.strings["btn_by_time"],
                         "callback": self._cb_mode,
                         "args": ("daily",),
-                    }
+                    },
+                    {
+                        "text": f"{'✅' if mode == 'off' else '🚫'} {self.strings['btn_off']}",
+                        "callback": self._cb_mode,
+                        "args": ("off",),
+                    },
                 ]
             )
 
@@ -262,24 +285,32 @@ class BackupMod(loader.Module):
         rows.append(
             [
                 {
-                    "text": mark(target == "channel", "📢 В канал"),
+                    "text": f"{'✅' if target == 'channel' else '📢'} {self.strings['btn_channel']}",
                     "callback": self._cb_target,
                     "args": ("channel",),
                 },
                 {
-                    "text": mark(target == "saved", "💾 В «Избранное»"),
+                    "text": f"{'✅' if target == 'saved' else '💾'} {self.strings['btn_saved']}",
                     "callback": self._cb_target,
                     "args": ("saved",),
                 },
             ]
         )
-        rows.append([{"text": "⬇️ Сделать бэкап сейчас", "callback": self._cb_now}])
-        rows.append([{"text": "🗑 Закрыть", "callback": self._cb_close}])
+
+        if target == "channel" and (link := await self._channel_link()):
+            rows.append([{"text": self.strings["btn_open"], "url": link}])
+
+        rows.append(
+            [
+                {"text": self.strings["btn_now"], "callback": self._cb_now},
+                {"text": self.strings["btn_close"], "callback": self._cb_close},
+            ]
+        )
 
         return rows
 
     async def _redraw(self, call) -> None:
-        await call.edit(await self._card_text(), reply_markup=self._card_markup())
+        await call.edit(await self._card_text(), reply_markup=await self._card_markup())
 
     # ------------------------------------------------------------------ #
     #  Кнопки
@@ -342,7 +373,7 @@ class BackupMod(loader.Module):
 
     @loader.callback_handler()
     async def backup_settings_callback_handler(self, call):
-        """Кнопка «Бэкап базы» в приветствии бота"""
+        """Кнопка «Бэкап» в меню бота"""
         if call.data != BACKUP_CALLBACK:
             return
 
@@ -350,7 +381,7 @@ class BackupMod(loader.Module):
         await self.inline.send_pm_unit(
             call.from_user.id,
             await self._card_text(),
-            self._card_markup(),
+            await self._card_markup(),
         )
 
     # ------------------------------------------------------------------ #
@@ -360,13 +391,13 @@ class BackupMod(loader.Module):
         await asyncio.sleep(ASK_DELAY)
         self.set("setup_asked", True)
 
-        text = await self._card_text("first_run")
+        text = await self._card_text(first_run=True)
 
         try:
             if self._inline_ready() and await self.inline.form(
                 text,
                 message=None,
-                reply_markup=self._card_markup(),
+                reply_markup=await self._card_markup(),
                 photo=BANNER,
             ):
                 return
@@ -397,7 +428,7 @@ class BackupMod(loader.Module):
         if self._inline_ready() and await self.inline.form(
             text,
             message=message,
-            reply_markup=self._card_markup(),
+            reply_markup=await self._card_markup(),
             photo=BANNER,
         ):
             return
@@ -511,20 +542,35 @@ class BackupMod(loader.Module):
         return payload, caption
 
     async def _ensure_channel(self):
+        """Канал бэкапов — на виду, а не в архиве: копии должны быть заметны."""
         if self._channel is None:
-            self._channel = await channels.ensure_channel(self.client, self.db, "backups")
+            self._channel = await channels.ensure_channel(
+                self.client,
+                self.db,
+                "backups",
+                archive=False,
+                mute=False,
+            )
+
+            # Канал мог быть создан прошлой версией — вытащим из архива один раз
+            if self._channel is not None and not self.get("unarchived"):
+                self.set("unarchived", True)
+                await channels.show_in_list(self.client, self._channel)
 
         return self._channel
+
+    async def _channel_link(self) -> str:
+        if not self._link and (channel := await self._ensure_channel()):
+            self._link = await channels.channel_link(self.client, channel)
+
+        return self._link
 
     async def _send_backup(self) -> None:
         payload, caption = self._payload()
         target = "me"
 
-        if self.config["target"] == "channel":
-            channel = await self._ensure_channel()
-
-            if channel is not None:
-                target = channel
+        if self.config["target"] == "channel" and (channel := await self._ensure_channel()):
+            target = channel
 
         await self.client.send_file(target, payload, caption=caption)
 

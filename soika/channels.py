@@ -77,6 +77,28 @@ async def channel_link(client: typing.Any, channel: typing.Any) -> str:
     return f"https://t.me/c/{channel.id}"
 
 
+async def show_in_list(client: typing.Any, channel: typing.Any) -> None:
+    """Вернуть канал из архива и включить уведомления.
+
+    Нужно для канала бэкапов: копии базы должны быть на виду, иначе легко
+    решить, что бэкапов вообще нет.
+    """
+    with contextlib.suppress(Exception):
+        await client(
+            EditPeerFoldersRequest(
+                [InputFolderPeer(await client.get_input_entity(channel), folder_id=0)]
+            )
+        )
+
+    with contextlib.suppress(Exception):
+        await client(
+            UpdateNotifySettingsRequest(
+                peer=InputNotifyPeer(await client.get_input_entity(channel)),
+                settings=InputPeerNotifySettings(show_previews=True, silent=False, mute_until=0),
+            )
+        )
+
+
 async def _archive(client: typing.Any, channel: typing.Any) -> None:
     with contextlib.suppress(Exception):
         await client(
