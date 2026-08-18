@@ -17,6 +17,7 @@ from telethon.errors import YouBlockedUserError
 from telethon.tl.functions.contacts import UnblockRequest
 
 from .. import utils
+from ..channels import flood_pause
 from ..version import BOT_PREFIX, BRAND_LATIN
 from .types import BotCreationError
 
@@ -98,6 +99,7 @@ async def create_bot(
         token = ""
 
         for _ in range(5):
+            await flood_pause()
             await conv.send_message(username)
             response = await _response(conv)
 
@@ -133,10 +135,12 @@ async def _configure(conv: typing.Any, username: str, avatar: Path | None) -> No
 
     for step in steps:
         for text in step:
+            await flood_pause()
             await conv.send_message(text)
             await _response(conv)
 
     if avatar and avatar.is_file():
+        await flood_pause()
         await conv.send_message("/setuserpic")
         await _response(conv)
         await conv.send_message(f"@{username}")

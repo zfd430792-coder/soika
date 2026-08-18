@@ -37,8 +37,6 @@ AVATAR = configuration.repo_root() / "assets" / "bot_pfp.png"
 #: Разделы меню бота. Обработчики живут в модулях, ядро только рисует кнопки
 MENU_CALLBACK = "soika:menu"
 BACKUP_CALLBACK = "soika:backup"
-LOGS_CALLBACK = "soika:logs"
-MODULES_CALLBACK = "soika:modules"
 SETTINGS_CALLBACK = "soika:settings"
 LANG_CALLBACK = "soika:lang:"
 
@@ -450,14 +448,7 @@ class InlineManager(UnitsMixin):
     def menu_markup(self) -> list[list[dict]]:
         """Главное меню. Разделы обрабатывают модули по callback_data."""
         return [
-            [
-                {"text": self._t("btn_commands"), "input": ""},
-                {"text": self._t("btn_backup"), "data": BACKUP_CALLBACK},
-            ],
-            [
-                {"text": self._t("btn_logs"), "data": LOGS_CALLBACK},
-                {"text": self._t("btn_modules"), "data": MODULES_CALLBACK},
-            ],
+            [{"text": self._t("btn_backup"), "data": BACKUP_CALLBACK}],
             [{"text": self._t("btn_settings"), "data": SETTINGS_CALLBACK}],
             [{"text": self._t("btn_sources"), "url": DEFAULT_REPO}],
         ]
