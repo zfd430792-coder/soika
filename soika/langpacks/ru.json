@@ -20,7 +20,6 @@
     "bot_guide": "📖 <b>Быстрый гайд:</b>\n<b>1.</b> <code>{prefix}help</code> — список модулей\n<b>2.</b> <code>{prefix}help имя</code> — что умеет модуль\n<b>3.</b> <code>{prefix}dlmod ссылка</code> — поставить модуль по ссылке\n<b>4.</b> <code>{prefix}loadmod</code> ответом на .py файл — поставить свой\n<b>5.</b> <code>{prefix}unloadmod имя</code> — выгрузить модуль",
     "bot_compat": "💡 Модули от <b>Hikka</b>, FTG, GeekTG и Dragon работают без правок.",
     "bot_backup_hint": "🗄 Бэкап базы и логи настраиваются кнопками ниже или командой <code>{prefix}backups</code>.",
-    "bot_status": "📟 <b>Аккаунт:</b> {owner}\n🧩 <b>Модулей:</b> {modules} · <b>команд:</b> {commands}\n⌨️ <b>Префикс:</b> <code>{prefix}</code> · <b>аптайм:</b> <code>{uptime}</code>\n🤖 <b>Инлайн:</b> <code>@{bot}</code> в любом чате",
     "bot_menu_title": "🪶 <b>Сойка {version}</b>\n<i>твой личный бот юзербота — кнопки, галереи, инлайн, логи</i>",
     "bot_menu_hint": "<i>Выбирай раздел кнопками ниже.</i>",
     "btn_commands": "📚 Команды",

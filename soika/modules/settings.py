@@ -24,7 +24,6 @@ class SettingsMod(loader.Module):
         "no_aliases": "🪶 <b>Алиасов нет</b>",
         "lang_set": "✅ <b>Язык интерфейса:</b> {}",
         "lang_unknown": "🚫 <b>Доступные языки:</b> {}",
-        "startup_on": "✅ <b>Сообщение при запуске включено</b>",
         "startup_off": "✅ <b>Сообщение при запуске выключено</b>",
     }
 
@@ -41,7 +40,6 @@ class SettingsMod(loader.Module):
         "no_aliases": "🪶 <b>No aliases</b>",
         "lang_set": "✅ <b>Interface language:</b> {}",
         "lang_unknown": "🚫 <b>Available languages:</b> {}",
-        "startup_on": "✅ <b>Startup message enabled</b>",
         "startup_off": "✅ <b>Startup message disabled</b>",
     }
 
@@ -132,14 +130,3 @@ class SettingsMod(loader.Module):
 
         translator.set_lang(lang)
         await utils.answer(message, self.strings["lang_set"].format(lang))
-
-    @loader.command()
-    async def startupmsgcmd(self, message):
-        """— включить/выключить сообщение в «Избранном» при запуске"""
-        disabled = bool(self.db.get(CORE, "no_startup_message"))
-        self.db.set(CORE, "no_startup_message", not disabled)
-
-        await utils.answer(
-            message,
-            self.strings["startup_on"] if disabled else self.strings["startup_off"],
-        )

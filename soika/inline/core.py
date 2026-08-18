@@ -427,18 +427,6 @@ class InlineManager(UnitsMixin):
     def prefix(self) -> str:
         return self._db.get("soika.settings", "prefixes", ["."])[0]
 
-    def status_block(self) -> str:
-        """Строки состояния — одинаковые в приветствии и в меню."""
-        return self._t(
-            "bot_status",
-            owner=utils.escape_html(utils.get_display_name(self._client.soika_me)),
-            modules=len(self.modules.modules) if self.modules else 0,
-            commands=len(self.modules.commands) if self.modules else 0,
-            prefix=self.prefix,
-            uptime=utils.formatted_uptime(),
-            bot=self.bot_username,
-        )
-
     def welcome_text(self, *, restarted: bool = False) -> str:
         header = self._t("bot_welcome_restart" if restarted else "bot_welcome_new")
 
@@ -447,16 +435,14 @@ class InlineManager(UnitsMixin):
                 header,
                 self._t("bot_guide", prefix=self.prefix),
                 self._t("bot_compat") + "\n" + self._t("bot_backup_hint", prefix=self.prefix),
-                self.status_block(),
             )
         )
 
     def menu_text(self) -> str:
-        """Короткий экран меню — без гайда, только состояние."""
+        """Экран меню: заголовок и подсказка. Цифры живут в своих разделах."""
         return "\n\n".join(
             (
                 self._t("bot_menu_title", version=__version_str__),
-                self.status_block(),
                 self._t("bot_menu_hint"),
             )
         )

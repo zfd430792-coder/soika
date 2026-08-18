@@ -12,7 +12,7 @@ import sys
 import time
 import typing
 
-from . import auth, compat, configuration, log, utils
+from . import auth, compat, configuration, log
 from .client import SoikaClient
 from .configuration import ApiCredentials
 from .database import Database
@@ -47,11 +47,6 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--proxy", help="socks5://user:pass@host:port")
     parser.add_argument("--debug", action="store_true", help="подробные логи")
     parser.add_argument("--root", action="store_true", help="не ругаться на запуск от root")
-    parser.add_argument(
-        "--no-startup-message",
-        action="store_true",
-        help="не писать в «Избранное» при запуске",
-    )
     return parser.parse_args(argv)
 
 
@@ -194,7 +189,7 @@ class Soika:
             await inline.start()
 
         await modules.send_ready()
-        await self._announce(client)
+        await self._finish_restart(client)
 
     async def _create_inline(self, client: SoikaClient, database: Database) -> typing.Any:
         try:
@@ -208,46 +203,25 @@ class Soika:
         return inline
 
     # ------------------------------------------------------------------ #
-    #  Сообщение о запуске
+    #  Досказать про перезапуск
     # ------------------------------------------------------------------ #
-    async def _announce(self, client: SoikaClient) -> None:
+    async def _finish_restart(self, client: SoikaClient) -> None:
+        """После .restart и .update дописать в то же сообщение, сколько заняло."""
         database = client.db
+        restart_info = database.get(CORE, "restart_info")
 
-        if restart_info := database.get(CORE, "restart_info"):
-            database.remove(CORE, "restart_info")
-            took = round(time.time() - restart_info.get("started", time.time()), 1)
-
-            with contextlib.suppress(Exception):
-                await client.edit_message(
-                    restart_info["chat"],
-                    restart_info["message"],
-                    client.translator.gettext("restart_finished").format(took),
-                )
-
+        if not restart_info:
             return
 
-        if self.arguments.no_startup_message or database.get(CORE, "no_startup_message"):
-            return
-
-        commit, _ = utils.get_git_info()
-        modules = client.loader
-
-        text = (
-            f"{BRAND_EMOJI} <b>{BRAND} {__version_str__} запущена</b>\n\n"
-            f"<b>Аккаунт:</b> {utils.escape_html(client.soika_me.first_name)}"
-            f" (<code>{client.tg_id}</code>)\n"
-            f"<b>Модулей:</b> {len(modules.modules)} · <b>команд:</b> {len(modules.commands)}\n"
-            f"<b>Платформа:</b> {utils.get_named_platform()}\n"
-        )
-
-        if commit:
-            text += f"<b>Сборка:</b> <code>{commit[:8]}</code>\n"
-
-        prefix = client.dispatcher.prefixes[0]
-        text += f"\nПиши <code>{prefix}help</code> — покажу, что умею."
+        database.remove(CORE, "restart_info")
+        took = round(time.time() - restart_info.get("started", time.time()), 1)
 
         with contextlib.suppress(Exception):
-            await client.send_message("me", text)
+            await client.edit_message(
+                restart_info["chat"],
+                restart_info["message"],
+                client.translator.gettext("restart_finished").format(took),
+            )
 
     # ------------------------------------------------------------------ #
     #  Основной цикл и остановка
