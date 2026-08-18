@@ -294,7 +294,6 @@ class UnitsMixin:
                 peer,
                 reply_to=reply_to,
                 silent=silent,
-                hide_via=True,
             )
         except Exception as e:  # noqa: BLE001
             logger.error("Не удалось отправить инлайн-сообщение: %s", e)
