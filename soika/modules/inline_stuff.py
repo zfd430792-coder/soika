@@ -32,6 +32,9 @@ class InlineStuffMod(loader.Module):
         "pic_updating": "🪶 <b>Меняю аватарку через BotFather...</b>",
         "pic_done": "✅ <b>Аватарка бота обновлена</b>",
         "pic_failed": "🚫 <b>BotFather не принял картинку</b>",
+        "revoking": "🪶 <b>Перевыпускаю токен через BotFather...</b>",
+        "revoked": "✅ <b>Токен перевыпущен, бот перезапущен</b>",
+        "revoke_failed": "🚫 <b>BotFather не отдал новый токен</b>",
     }
 
     strings_en = {
@@ -47,6 +50,9 @@ class InlineStuffMod(loader.Module):
         "pic_updating": "🪶 <b>Updating avatar via BotFather...</b>",
         "pic_done": "✅ <b>Bot avatar updated</b>",
         "pic_failed": "🚫 <b>BotFather rejected the picture</b>",
+        "revoking": "🪶 <b>Revoking the token via BotFather...</b>",
+        "revoked": "✅ <b>Token revoked, bot restarted</b>",
+        "revoke_failed": "🚫 <b>BotFather did not return a new token</b>",
     }
 
     def _alive(self) -> bool:
@@ -126,6 +132,25 @@ class InlineStuffMod(loader.Module):
                 os.remove(path)
 
         await utils.answer(message, self.strings["pic_done"])
+
+    @loader.owner
+    @loader.command()
+    async def revokebotcmd(self, message):
+        """— перевыпустить токен бота (если он застрял или утёк)"""
+        from ..inline import token as token_tools
+
+        message = await utils.answer(message, self.strings["revoking"])
+        new_token = await token_tools.revoke_token(self.client, self.db)
+
+        if not new_token:
+            await utils.answer(message, self.strings["revoke_failed"])
+            return
+
+        # Живой Bot держит старый токен — поднимаем подсистему заново
+        await self.inline.stop()
+        await self.inline.start()
+
+        await utils.answer(message, self.strings["revoked"])
 
     async def _push_avatar(self, path: str) -> None:
         async with self.client.conversation(BOTFATHER, timeout=40, exclusive=False) as conv:

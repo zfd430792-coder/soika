@@ -344,6 +344,12 @@ class UpdaterMod(loader.Module):
         )
         await self.db.flush()
 
+        # Гасим бота вежливо: иначе его getUpdates ещё минуту держит Telegram,
+        # новый процесс получает 409 и бот молчит после перезапуска
+        if self.inline is not None:
+            with contextlib.suppress(Exception):
+                await self.inline.stop()
+
         logger.info("Перезапуск процесса")
         await asyncio.sleep(0.5)
 

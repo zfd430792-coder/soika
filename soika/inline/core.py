@@ -7,15 +7,13 @@ import contextlib
 import logging
 import typing
 
-from aiogram import Bot, Dispatcher
+from aiogram import BaseMiddleware, Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.exceptions import TelegramConflictError, TelegramUnauthorizedError
 from aiogram.filters import CommandStart
 from aiogram.types import (
     CallbackQuery,
     ChosenInlineResult,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
     InlineQuery,
     InlineQueryResultArticle,
     InlineQueryResultPhoto,
@@ -36,8 +34,41 @@ logger = logging.getLogger(__name__)
 CLEANUP_INTERVAL = 120
 AVATAR = configuration.repo_root() / "assets" / "bot_pfp.png"
 
-#: Кнопка «Бэкап базы» в приветствии — её ловит модуль бэкапа
+#: Разделы меню бота. Обработчики живут в модулях, ядро только рисует кнопки
+MENU_CALLBACK = "soika:menu"
 BACKUP_CALLBACK = "soika:backup"
+LOGS_CALLBACK = "soika:logs"
+MODULES_CALLBACK = "soika:modules"
+SETTINGS_CALLBACK = "soika:settings"
+
+#: Сколько раз пробуем перебить чужой getUpdates после перезапуска
+POLLING_ATTEMPTS = 24
+POLLING_RETRY = 5
+
+
+class OwnerOnlyMiddleware(BaseMiddleware):
+    """Пускает к боту только владельца аккаунта, остальных молча игнорирует.
+
+    Бот служебный: он умеет менять настройки юзербота и показывать логи,
+    поэтому посторонним тут делать нечего.
+    """
+
+    def __init__(self, owner_id: int) -> None:
+        self.owner_id = owner_id
+
+    async def __call__(
+        self,
+        handler: typing.Callable,
+        event: typing.Any,
+        data: dict,
+    ) -> typing.Any:
+        user = data.get("event_from_user")
+
+        if user is None or user.id != self.owner_id:
+            logger.debug("Бота потрогал посторонний: %s", getattr(user, "id", "?"))
+            return None
+
+        return await handler(event, data)
 
 
 class InlineQueryWrapper:
@@ -116,6 +147,7 @@ class InlineManager(UnitsMixin):
 
         logger.info("Инлайн-бот @%s на связи", self.bot_username)
         utils.spawn(self.greet_owner())
+        utils.spawn(self.announce_restart())
         return True
 
     async def greet_owner(self, *, force: bool = False) -> bool:
@@ -148,19 +180,34 @@ class InlineManager(UnitsMixin):
         return True
 
     async def _run_polling(self) -> None:
-        try:
-            await self.dp.start_polling(self.bot, handle_signals=False)
-        except TelegramConflictError:
-            logger.warning("Бот уже где-то запущен — перевыпускаю токен")
-            new_token = await token_tools.revoke_token(self._client, self._db)
+        """Опрос бота с переживанием перезапусков.
 
-            if new_token:
-                await self.stop()
-                await self.start()
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logger.exception("Polling инлайн-бота упал")
+        После ``os.execl`` предыдущий процесс не успевает закрыть свой
+        ``getUpdates``, и Telegram отдаёт 409 ещё до минуты. Это не повод
+        отзывать токен — просто ждём и пробуем снова.
+        """
+        for attempt in range(1, POLLING_ATTEMPTS + 1):
+            try:
+                await self.dp.start_polling(self.bot, handle_signals=False)
+                return
+            except TelegramConflictError:
+                logger.warning(
+                    "Бота опрашивает кто-то ещё (попытка %s/%s) — жду %s с",
+                    attempt,
+                    POLLING_ATTEMPTS,
+                    POLLING_RETRY,
+                )
+                await asyncio.sleep(POLLING_RETRY)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Polling инлайн-бота упал, повтор через %s с", POLLING_RETRY)
+                await asyncio.sleep(POLLING_RETRY)
+
+        logger.error(
+            "Бот так и не смог начать опрос. Если он запущен где-то ещё — "
+            "останови тот процесс, иначе перевыпусти токен: .revokebot"
+        )
 
     async def stop(self) -> None:
         self.init_complete = False
@@ -188,6 +235,7 @@ class InlineManager(UnitsMixin):
     #  Обработчики бота
     # ------------------------------------------------------------------ #
     def _register_handlers(self) -> None:
+        self.dp.update.outer_middleware(OwnerOnlyMiddleware(self._client.tg_id))
         self.dp.inline_query.register(self._on_inline_query)
         self.dp.chosen_inline_result.register(self._on_chosen_result)
         self.dp.callback_query.register(self._on_callback)
@@ -317,6 +365,10 @@ class InlineManager(UnitsMixin):
             unit.bot_chat = call.message.chat.id
             unit.bot_message = call.message.message_id
 
+        # Регистрируем юнит: если обработчик перерисует сообщение своими
+        # кнопками-колбэками, они должны продолжать работать
+        self._units[unit.id] = unit
+
         inline_call = InlineCall(self, unit, call)
 
         for handler in list(self.modules.callback_handlers.values()):
@@ -331,50 +383,63 @@ class InlineManager(UnitsMixin):
     #  Личка бота
     # ------------------------------------------------------------------ #
     async def _on_start(self, message: BotMessage) -> None:
-        if message.from_user.id != self._client.tg_id:
-            await message.answer(
-                "🪶 <b>Это служебный бот юзербота Сойка.</b>\n"
-                "Он принадлежит другому человеку и тебе ничем не поможет."
-            )
+        await self.send_pm_unit(message.chat.id, self.menu_text(), self.menu_markup())
+
+    async def announce_restart(self) -> None:
+        """Отмечаемся в личке при каждом запуске — видно, что бот поднялся."""
+        await asyncio.sleep(6)
+
+        # На самом первом запуске приветствие пришлёт greet_owner
+        if not self._db.get("soika.inline", "greeted"):
             return
 
-        await message.answer(self.welcome_text(), reply_markup=self.welcome_markup())
+        with contextlib.suppress(Exception):
+            await self.send_pm_unit(
+                self._client.tg_id,
+                f"{BRAND_EMOJI} <b>{BRAND} перезапущена и на связи</b>\n\n"
+                f"{self.menu_text(header=False)}",
+                self.menu_markup(),
+            )
 
-    def welcome_text(self) -> str:
+    def menu_text(self, *, header: bool = True) -> str:
+        """Тело меню бота: кто, сколько модулей, как звать."""
         prefix = self._db.get("soika.settings", "prefixes", ["."])[0]
         owner = utils.get_display_name(self._client.soika_me)
 
         modules = len(self.modules.modules) if self.modules else 0
         commands = len(self.modules.commands) if self.modules else 0
 
-        return (
-            f"{BRAND_EMOJI} <b>{BRAND} {__version_str__} на связи</b>\n\n"
-            f"Это твой личный инлайн-бот, я создал его сам. Через меня работают:\n"
-            "▫️ кнопки и формы в чатах\n"
-            "▫️ галереи и постраничные списки\n"
-            "▫️ инлайн-режим — набери <code>@"
-            f"{self.bot_username}</code> в любом чате\n"
-            "▫️ трейсбеки упавших команд\n\n"
-            f"<b>Аккаунт:</b> {utils.escape_html(owner)}\n"
-            f"<b>Модулей:</b> {modules} · <b>команд:</b> {commands}\n"
-            f"<b>Префикс:</b> <code>{prefix}</code>\n\n"
-            f"Команды пиши в самом Telegram, например <code>{prefix}help</code>.\n"
-            "Меня не удаляй и не блокируй — сломаются кнопки."
+        title = (
+            f"{BRAND_EMOJI} <b>{BRAND} {__version_str__}</b>\n"
+            "<i>твой личный бот юзербота — кнопки, галереи, инлайн, логи</i>\n\n"
+            if header
+            else ""
         )
 
-    def welcome_markup(self) -> InlineKeyboardMarkup:
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="📚 Показать команды",
-                        switch_inline_query_current_chat="",
-                    )
-                ],
-                [InlineKeyboardButton(text="🗄 Бэкап базы", callback_data=BACKUP_CALLBACK)],
-                [InlineKeyboardButton(text="🌐 Исходники", url=DEFAULT_REPO)],
-            ]
+        return (
+            f"{title}"
+            f"<b>Аккаунт:</b> {utils.escape_html(owner)}\n"
+            f"<b>Модулей:</b> {modules} · <b>команд:</b> {commands}\n"
+            f"<b>Префикс:</b> <code>{prefix}</code> · <b>аптайм:</b> "
+            f"<code>{utils.formatted_uptime()}</code>\n"
+            f"<b>Инлайн:</b> <code>@{self.bot_username}</code> в любом чате\n\n"
+            "<i>Выбирай раздел кнопками ниже.</i>"
         )
+
+    def menu_markup(self) -> list[list[dict]]:
+        """Главное меню. Разделы обрабатывают модули по callback_data."""
+        return [
+            [
+                {"text": "📚 Команды", "input": ""},
+                {"text": "🗄 Бэкап", "data": BACKUP_CALLBACK},
+            ],
+            [
+                {"text": "📜 Логи", "data": LOGS_CALLBACK},
+                {"text": "🧩 Модули", "data": MODULES_CALLBACK},
+            ],
+            [{"text": "⚙️ Настройки", "data": SETTINGS_CALLBACK}],
+            [{"text": "🌐 Исходники", "url": DEFAULT_REPO}],
+        ]
 
     async def _on_message(self, message: BotMessage) -> None:
         """Ввод текста в ЛС бота — используется редактором конфигов."""
