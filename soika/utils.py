@@ -17,6 +17,7 @@ import random
 import re
 import shlex
 import string
+import sys
 import time
 import typing
 from pathlib import Path
@@ -469,11 +470,14 @@ def get_named_platform() -> str:
     if os.name == "nt":
         return "🪟 Windows"
 
+    if sys.platform == "darwin":
+        return "🍏 macOS"
+
     with contextlib.suppress(OSError), open("/proc/1/cgroup", encoding="utf-8") as f:
         if "lxc" in f.read():
             return "📦 LXC"
 
-    return "🖥 VPS / Linux"
+    return "💎 VDS"
 
 
 def get_ram_usage() -> float:
