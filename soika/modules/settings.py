@@ -43,7 +43,7 @@ class SettingsMod(loader.Module):
         "startup_off": "✅ <b>Startup message disabled</b>",
     }
 
-    @loader.command()
+    @loader.command(alias="setprefix")
     async def prefixcmd(self, message):
         """[новый префикс] — посмотреть или сменить префикс команд"""
         args = utils.get_args_raw(message)
@@ -115,7 +115,7 @@ class SettingsMod(loader.Module):
         )
         await utils.answer(message, self.strings["aliases"].format(listing))
 
-    @loader.command()
+    @loader.command(alias="setlang")
     async def langcmd(self, message):
         """<ru|en> — язык интерфейса"""
         lang = utils.get_args_raw(message).lower()

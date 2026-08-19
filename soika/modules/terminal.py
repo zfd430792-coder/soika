@@ -38,7 +38,7 @@ class TerminalMod(loader.Module):
         self._processes: dict[int, asyncio.subprocess.Process] = {}
 
     @loader.owner
-    @loader.command(alias="sh")
+    @loader.command(aliases=["sh", "terminal"])
     async def shellcmd(self, message):
         """<команда> — выполнить команду в системе"""
         command = utils.get_args_raw(message)
