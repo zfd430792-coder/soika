@@ -134,12 +134,29 @@ class SecurityManager:
         if user_id is None:
             user_id = getattr(message, "sender_id", None)
 
-        if user_id is None:
-            return False
+        edited_by_other = False
+
+        # Пост в канале Telegram подписывает самим каналом, а не автором: sender_id
+        # там чужой. Если пост правили, настоящего автора правки видно только в
+        # журнале админов — иначе сосед-админ выполнил бы команду от твоего имени
+        if self._is_channel_post(message) and getattr(message, "edit_date", None):
+            editor = await self._channel_editor(message)
+
+            if editor is not None:
+                user_id = editor
+                edited_by_other = editor != self._client.tg_id
 
         # Свой аккаунт может всё и всегда
         if user_id == self._client.tg_id:
             return True
+
+        # Своё сообщение — своя команда. Так работают команды в собственных
+        # каналах (например, в soika-backups) и от имени группы
+        if not edited_by_other and getattr(message, "out", False):
+            return True
+
+        if user_id is None:
+            return False
 
         mask = self.mask_for(command, func)
 
@@ -168,6 +185,28 @@ class SecurityManager:
             return False
 
         return await self._check_group(message, mask, user_id)
+
+    @staticmethod
+    def _is_channel_post(message: Message | None) -> bool:
+        """Пост в канале (не в супергруппе) — у него нет автора-человека."""
+        return bool(
+            message is not None
+            and getattr(message, "is_channel", False)
+            and not getattr(message, "is_group", False)
+        )
+
+    async def _channel_editor(self, message: Message) -> int | None:
+        """Кто на самом деле поправил пост в канале — по журналу админов."""
+        with contextlib.suppress(Exception):
+            async for event in self._client.iter_admin_log(
+                message.chat_id,
+                limit=10,
+                edit=True,
+            ):
+                if event.action.prev_message.id == message.id:
+                    return event.user_id
+
+        return None
 
     async def _check_group(self, message: Message, mask: int, user_id: int) -> bool:
         chat = await self._get_chat(message)

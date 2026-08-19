@@ -38,8 +38,10 @@ MARKER = "soika.backup"
 #: Карта «модуль → ссылка» внутри архива с модулями
 MODS_MAP = "modules.json"
 
-#: Раздел базы с токеном инлайн-бота: из чужой копии он не переносится
+#: Раздел базы с инлайн-ботом. Из копии он не переносится: чужой токен всё
+#: равно не заработает, а свой после восстановления заводить заново не нужно
 INLINE_OWNER = "soika.inline"
+INLINE_KEEP = ("bot_token", "bot_username")
 
 ASK_DELAY = 12
 
@@ -636,10 +638,17 @@ class BackupMod(loader.Module):
             await utils.answer(message, self.strings["bad_file"])
             return
 
-        # Токен инлайн-бота из копии не берём: у этого аккаунта он свой, а чужой
-        # всё равно не заработает. Так же поступает Hikka
+        # Инлайн-бот остаётся тот, что уже поднят на этом аккаунте: Hikka в этом
+        # месте просто выбрасывает чужой токен, но тогда после восстановления
+        # своей же копии бот заводится заново — поэтому свой сохраняем
         with contextlib.suppress(KeyError):
             data[INLINE_OWNER].pop("bot_token")
+
+        own_bot = {
+            key: value
+            for key, value in (self.db.get(INLINE_OWNER, None, {}) or {}).items()
+            if key in INLINE_KEEP
+        }
 
         # Подпись версий 1.5.1 в базе не нужна
         data.pop(MARKER, None)
@@ -650,6 +659,10 @@ class BackupMod(loader.Module):
 
         self.db.clear()
         self.db.update(data)
+
+        if own_bot:
+            self.db.setdefault(INLINE_OWNER, {}).update(own_bot)
+
         await self.db.flush()
 
         sent = await utils.answer(message, self.strings["restored"].format(len(data)))
