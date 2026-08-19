@@ -306,6 +306,15 @@ class Database(dict):
         except OSError as e:
             logger.error("Не получилось создать ревизию базы: %s", e)
 
+    def keep_revision(self) -> None:
+        """Немедленно отложить копию текущего файла — перед опасной операцией.
+
+        Обычные ревизии делаются не чаще раза в минуту; перед восстановлением
+        базы ждать нельзя: перезаписываем — значит, старое надо сохранить сейчас.
+        """
+        self._last_revision = 0.0
+        self._rotate_revisions()
+
     async def flush(self) -> None:
         """Дописать всё немедленно — вызывается перед перезапуском."""
         if self._save_task and not self._save_task.done():

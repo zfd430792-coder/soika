@@ -12,10 +12,12 @@ import io
 import json
 import logging
 import time
+import typing
 from datetime import datetime
 
 from .. import channels, loader, utils
 from ..inline.core import BACKUP_CALLBACK
+from ..version import __version_str__
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,9 @@ TIME_CHOICES = ["00:00", "03:00", "06:00", "09:00", "12:00", "15:00", "18:00", "
 
 BANNER = "https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/backup_banner.png"
 
+#: Служебный раздел в файле бэкапа: чей он и когда снят
+MARKER = "soika.backup"
+
 ASK_DELAY = 12
 
 
@@ -40,8 +45,20 @@ class BackupMod(loader.Module):
         "name": "Бэкап",
         "caption": "🪶 <b>Бэкап базы Сойки</b>\n<b>Разделов:</b> {} · <b>время:</b> {}",
         "no_file": "🚫 <b>Ответь на файл с бэкапом</b>",
-        "restored": "✅ <b>База восстановлена. Перезапусти Сойку:</b> <code>{}restart</code>",
-        "bad_file": "🚫 <b>Это не похоже на бэкап базы</b>",
+        "restored": (
+            "✅ <b>База восстановлена</b> — разделов: {}\n"
+            "<i>Прежняя копия отложена рядом с базой, файл</i> "
+            "<code>db-….json.rev1</code>\n\n"
+            "<b>Перезапусти Сойку:</b> <code>{}restart</code>"
+        ),
+        "bad_file": (
+            "🚫 <b>Это не похоже на бэкап базы Сойки</b>\n"
+            "<i>Восстанавливать нечего — база осталась как была.</i>"
+        ),
+        "foreign": (
+            "🚫 <b>Это бэкап другого аккаунта</b>\n"
+            "<i>В нём чужой инлайн-бот и чужие каналы — сюда его ставить нельзя.</i>"
+        ),
         "title": "🗄 <b>Бэкап базы</b>",
         "title_first_run": (
             "🗄 <b>Настроим бэкап базы?</b>\n"
@@ -55,7 +72,7 @@ class BackupMod(loader.Module):
         "mode_off": "не делается, только вручную",
         "mode_daily": "каждый день в <code>{}</code>",
         "mode_interval": "каждые <code>{}</code> ч.",
-        "target_channel": "📢 <b>Куда:</b> <a href=\"{}\">soika-backups</a>",
+        "target_channel": '📢 <b>Куда:</b> <a href="{}">soika-backups</a>',
         "target_channel_plain": "📢 <b>Куда:</b> в канал soika-backups",
         "target_saved": "💾 <b>Куда:</b> в «Избранное»",
         "never": "<i>ещё не делался</i>",
@@ -87,8 +104,20 @@ class BackupMod(loader.Module):
     strings_en = {
         "caption": "🪶 <b>Soika database backup</b>\n<b>Sections:</b> {} · <b>time:</b> {}",
         "no_file": "🚫 <b>Reply to a backup file</b>",
-        "restored": "✅ <b>Database restored. Restart Soika:</b> <code>{}restart</code>",
-        "bad_file": "🚫 <b>This does not look like a backup</b>",
+        "restored": (
+            "✅ <b>Database restored</b> — sections: {}\n"
+            "<i>The previous copy is kept next to the database as</i> "
+            "<code>db-….json.rev1</code>\n\n"
+            "<b>Restart Soika:</b> <code>{}restart</code>"
+        ),
+        "bad_file": (
+            "🚫 <b>This does not look like a Soika backup</b>\n"
+            "<i>Nothing to restore — the database is untouched.</i>"
+        ),
+        "foreign": (
+            "🚫 <b>This backup belongs to another account</b>\n"
+            "<i>It carries a foreign inline bot and channels.</i>"
+        ),
         "title": "🗄 <b>Database backup</b>",
         "title_first_run": (
             "🗄 <b>Let's set up backups</b>\n"
@@ -102,7 +131,7 @@ class BackupMod(loader.Module):
         "mode_off": "never, manual only",
         "mode_daily": "every day at <code>{}</code>",
         "mode_interval": "every <code>{}</code> h.",
-        "target_channel": "📢 <b>Where:</b> <a href=\"{}\">soika-backups</a>",
+        "target_channel": '📢 <b>Where:</b> <a href="{}">soika-backups</a>',
         "target_channel_plain": "📢 <b>Where:</b> soika-backups channel",
         "target_saved": "💾 <b>Where:</b> Saved Messages",
         "never": "<i>never</i>",
@@ -491,16 +520,44 @@ class BackupMod(loader.Module):
             await utils.answer(message, self.strings["bad_file"])
             return
 
-        if not isinstance(data, dict):
-            await utils.answer(message, self.strings["bad_file"])
+        if reason := self._reject_reason(data):
+            await utils.answer(message, self.strings[reason])
             return
+
+        data.pop(MARKER, None)
+
+        # Прежнюю базу откладываем в ревизию: восстановление перезаписывает всё,
+        # и если файл окажется не тем, откатиться будет не на что
+        self.db.keep_revision()
 
         self.db.clear()
         self.db.update(data)
         await self.db.flush()
 
         prefix = self.client.dispatcher.prefixes[0]
-        await utils.answer(message, self.strings["restored"].format(prefix))
+        await utils.answer(message, self.strings["restored"].format(len(data), prefix))
+
+    def _reject_reason(self, data: typing.Any) -> str | None:
+        """Почему файл нельзя восстанавливать. ``None`` — можно.
+
+        База выглядит как ``{раздел: {ключ: значение}}``. Раньше проверка была
+        одна — «это словарь», поэтому любой посторонний JSON стирал базу дочиста.
+        """
+        if not isinstance(data, dict) or not data:
+            return "bad_file"
+
+        if not all(isinstance(value, dict) for value in data.values()):
+            return "bad_file"
+
+        owner = data.get(MARKER, {}).get("owner")
+
+        if owner is not None and owner != self.client.tg_id:
+            return "foreign"
+
+        known = {"soika.settings", "soika.inline", "soika.core", "soika.loader", MARKER}
+        known.update(type(module).__name__ for module in self.allmodules.modules)
+
+        return None if known & set(data) else "bad_file"
 
     # ------------------------------------------------------------------ #
     #  Расписание
@@ -537,7 +594,16 @@ class BackupMod(loader.Module):
     #  Отправка
     # ------------------------------------------------------------------ #
     def _payload(self) -> tuple:
-        dump = json.dumps(dict(self.db), ensure_ascii=False, indent=2)
+        data = dict(self.db)
+
+        # Подписываем копию: чья она и чем снята — чтобы чужую не поставили сюда
+        data[MARKER] = {
+            "owner": self.client.tg_id,
+            "version": __version_str__,
+            "created": int(time.time()),
+        }
+
+        dump = json.dumps(data, ensure_ascii=False, indent=2)
         payload = io.BytesIO(dump.encode())
         payload.name = f"soika-db-{self.client.tg_id}-{time.strftime('%Y%m%d-%H%M')}.json"
         caption = self.strings["caption"].format(len(self.db), time.strftime("%d.%m.%Y %H:%M"))
