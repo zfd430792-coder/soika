@@ -1,18 +1,36 @@
-"""Обновление из git, перезапуск и автопроверка новых версий."""
+"""Обновление из git, перезапуск и уведомления о новых версиях."""
 
 import asyncio
 import contextlib
 import logging
 import os
+import re
 import sys
 import time
 
 from .. import configuration, loader, utils
-from ..version import __version_str__
+from ..version import DEFAULT_REPO, __version_str__
 
 logger = logging.getLogger(__name__)
 
 CORE = "soika.core"
+
+#: Сколько коммитов показываем в списке изменений
+CHANGELOG_LIMIT = 8
+
+#: Кнопка «Обновить» под уведомлением должна жить долго — неделя
+NOTIFY_TTL = 7 * 24 * 3600
+
+#: Первая проверка обновлений после старта: даём боту подняться
+FIRST_CHECK_DELAY = 120
+
+#: Версия в исходниках — читаем её и у себя, и на сервере
+VERSION_RE = re.compile(r"__version__\s*=\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)")
+
+#: Баннер уведомления об обновлении
+DEFAULT_BANNER = (
+    "https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/update_banner.png"
+)
 
 
 @loader.tds
@@ -27,48 +45,72 @@ class UpdaterMod(loader.Module):
             "🚫 <b>Это не git-репозиторий или не настроен remote.</b>\n"
             "<i>Обновляться неоткуда — переустанови Сойку через install.sh</i>"
         ),
-        "up_to_date": "✅ <b>Уже последняя версия</b> (<code>{}</code>)",
+        "up_to_date": "✅ <b>Уже последняя версия</b> (сборка <code>{}</code>)",
         "deps": "🪶 <b>Ставлю зависимости...</b>",
         "failed": "🚫 <b>Обновление не удалось:</b>\n<code>{}</code>",
-        "updated": "✅ <b>Обновился:</b> <code>{}</code> → <code>{}</code>\n<i>{}</i>",
         "available": (
             "🪶 <b>Вышло обновление Сойки</b>\n\n"
-            "<b>Новых коммитов:</b> {count}\n"
-            "<b>Последний:</b> <i>{message}</i>\n"
-            "<b>Версия:</b> <code>{current}</code> → <code>{latest}</code>"
+            "{versions}\n"
+            "📦 <b>Новых коммитов:</b> {count}\n\n"
+            "{changelog}"
         ),
+        "auto_updating": "🤖 <b>Нашлось обновление — обновляюсь сам</b>\n\n{versions}\n\n{changelog}",
+        "updated": "✅ <b>Сойка обновлена</b>\n\n{versions}\n\n{changelog}",
+        "versions_new": (
+            "🕸 <b>Версия:</b> <code>{}</code> → <code>{}</code>\n"
+            "🔖 <b>Сборка:</b> <code>{}</code> → <code>{}</code>"
+        ),
+        "versions_same": (
+            "🕸 <b>Версия:</b> <code>{}</code>\n🔖 <b>Сборка:</b> <code>{}</code> → <code>{}</code>"
+        ),
+        "changelog": "📝 <b>Что изменилось:</b>\n{}",
+        "changelog_more": "\n<i>…и ещё коммитов: {}</i>",
+        "changelog_empty": "<i>Список изменений недоступен</i>",
         "check_now": "🔎 <b>Проверяю обновления...</b>",
-        "no_updates": "✅ <b>Обновлений нет</b> (<code>{}</code>)",
+        "no_updates": "✅ <b>Обновлений нет</b> (сборка <code>{}</code>)",
         "auto_on": "🤖 <b>Автообновление включено</b> — буду обновляться сам",
         "auto_off": "✋ <b>Автообновление выключено</b> — только по команде",
         "later": "Ладно, потом",
         "btn_update": "⬇️ Обновить",
         "btn_later": "🚫 Позже",
-        "auto_updating": "🤖 <b>Нашёл обновление и обновляюсь сам</b>\n<i>{}</i>",
+        "btn_commits": "📖 Коммиты",
+        "hint": "\n\n<i>Обновиться:</i> <code>{}update</code>",
     }
 
     strings_en = {
         "restarting": "🪶 <b>Restarting...</b>",
         "updating": "🪶 <b>Updating...</b>",
         "no_git": "🚫 <b>Not a git repository or no remote configured</b>",
-        "up_to_date": "✅ <b>Already up to date</b> (<code>{}</code>)",
+        "up_to_date": "✅ <b>Already up to date</b> (build <code>{}</code>)",
         "deps": "🪶 <b>Installing requirements...</b>",
         "failed": "🚫 <b>Update failed:</b>\n<code>{}</code>",
-        "updated": "✅ <b>Updated:</b> <code>{}</code> → <code>{}</code>\n<i>{}</i>",
         "available": (
             "🪶 <b>Soika update available</b>\n\n"
-            "<b>New commits:</b> {count}\n"
-            "<b>Latest:</b> <i>{message}</i>\n"
-            "<b>Version:</b> <code>{current}</code> → <code>{latest}</code>"
+            "{versions}\n"
+            "📦 <b>New commits:</b> {count}\n\n"
+            "{changelog}"
         ),
+        "auto_updating": "🤖 <b>Found an update, updating myself</b>\n\n{versions}\n\n{changelog}",
+        "updated": "✅ <b>Soika updated</b>\n\n{versions}\n\n{changelog}",
+        "versions_new": (
+            "🕸 <b>Version:</b> <code>{}</code> → <code>{}</code>\n"
+            "🔖 <b>Build:</b> <code>{}</code> → <code>{}</code>"
+        ),
+        "versions_same": (
+            "🕸 <b>Version:</b> <code>{}</code>\n🔖 <b>Build:</b> <code>{}</code> → <code>{}</code>"
+        ),
+        "changelog": "📝 <b>What changed:</b>\n{}",
+        "changelog_more": "\n<i>…and {} more commits</i>",
+        "changelog_empty": "<i>Changelog is not available</i>",
         "check_now": "🔎 <b>Checking for updates...</b>",
-        "no_updates": "✅ <b>No updates</b> (<code>{}</code>)",
+        "no_updates": "✅ <b>No updates</b> (build <code>{}</code>)",
         "auto_on": "🤖 <b>Auto update enabled</b>",
         "auto_off": "✋ <b>Auto update disabled</b>",
         "later": "Fine, later",
         "btn_update": "⬇️ Update",
         "btn_later": "🚫 Later",
-        "auto_updating": "🤖 <b>Found an update, updating myself</b>\n<i>{}</i>",
+        "btn_commits": "📖 Commits",
+        "hint": "\n\n<i>To update:</i> <code>{}update</code>",
     }
 
     config = loader.ModuleConfig(
@@ -90,10 +132,26 @@ class UpdaterMod(loader.Module):
             "Обновляться самостоятельно, не спрашивая",
             validator=loader.validators.Boolean(),
         ),
+        loader.ConfigValue(
+            "banner_url",
+            DEFAULT_BANNER,
+            "Баннер уведомления об обновлении. Пусто — только текст",
+            validator=loader.validators.Union(
+                loader.validators.NoneType(),
+                loader.validators.Link(),
+            ),
+        ),
     )
+
+    #: Первую проверку после старта делаем с задержкой, дальше — по интервалу
+    _checked_once = False
 
     async def client_ready(self, client, db):
         self.update_checker.interval = self.config["interval"] * 60
+
+        # После обновления рассказываем, что именно приехало
+        if self.get("update_report"):
+            utils.spawn(self._report_update())
 
     async def config_complete(self):
         with contextlib.suppress(Exception):
@@ -108,7 +166,6 @@ class UpdaterMod(loader.Module):
         """— перезапустить Сойку"""
         await self._restart(message, self.strings["restarting"])
 
-    @loader.owner
     @loader.command(alias="up")
     async def updatecmd(self, message):
         """— скачать обновление из git и перезапуститься"""
@@ -162,10 +219,10 @@ class UpdaterMod(loader.Module):
         text = f"🪶 <b>Сойка {__version_str__}</b>"
 
         if commit:
-            text += f"\n<b>Коммит:</b> <code>{commit[:8]}</code>"
+            text += f"\n🔖 <b>Сборка:</b> <code>{commit[:8]}</code>"
 
         if url:
-            text += f"\n<b>Репозиторий:</b> {utils.escape_html(url)}"
+            text += f"\n🕸 <b>Репозиторий:</b> {utils.escape_html(url)}"
 
         auto = self.strings["auto_on"] if self.config["auto_update"] else self.strings["auto_off"]
         await utils.answer(message, f"{text}\n\n{auto}")
@@ -173,8 +230,14 @@ class UpdaterMod(loader.Module):
     # ------------------------------------------------------------------ #
     #  Автопроверка
     # ------------------------------------------------------------------ #
-    @loader.loop(interval=3600, autostart=True, wait_before=True)
+    @loader.loop(interval=3600, autostart=True)
     async def update_checker(self):
+        # Раньше первая проверка ждала целый час и обнулялась при каждом
+        # перезапуске — уведомление могло не прийти вообще никогда
+        if not self._checked_once:
+            self._checked_once = True
+            await asyncio.sleep(FIRST_CHECK_DELAY)
+
         if not self.config["check"]:
             return
 
@@ -188,15 +251,15 @@ class UpdaterMod(loader.Module):
         if not commits:
             return
 
-        headline = self._headline(commits[0])
-
         if self.config["auto_update"]:
             logger.info("Найдено обновление %s — обновляюсь сам", commits[0].hexsha[:8])
-            sent = await self.client.send_message(
-                "me",
-                self.strings["auto_updating"].format(utils.escape_html(headline)),
+            await self._notify(
+                self.strings["auto_updating"].format(
+                    versions=await self._versions(repo, commits),
+                    changelog=self._changelog(commits),
+                )
             )
-            await self._update(sent, repo=repo)
+            await self._update(None, repo=repo, commits=commits)
             return
 
         if self.get("notified") == commits[0].hexsha:
@@ -205,45 +268,149 @@ class UpdaterMod(loader.Module):
         self.set("notified", commits[0].hexsha)
         await self._offer(commits, repo)
 
+    # ------------------------------------------------------------------ #
+    #  Уведомления
+    # ------------------------------------------------------------------ #
     async def _offer(self, commits, repo, message=None) -> None:
-        """Показать, что вышло обновление, и предложить кнопку обновления."""
+        """Показать, что вышло обновление, и дать кнопку «Обновить»."""
         text = self.strings["available"].format(
+            versions=await self._versions(repo, commits),
             count=len(commits),
-            message=utils.escape_html(self._headline(commits[0])),
-            current=repo.head.commit.hexsha[:8],
-            latest=commits[0].hexsha[:8],
+            changelog=self._changelog(commits),
         )
         buttons = [
-            {"text": self.strings["btn_update"], "callback": self._cb_update},
-            {"text": self.strings["btn_later"], "callback": self._cb_later},
+            [
+                {"text": self.strings["btn_update"], "callback": self._cb_update},
+                {"text": self.strings["btn_later"], "callback": self._cb_later},
+            ]
         ]
 
-        inline_ready = self.inline is not None and self.inline.init_complete
+        if link := self._commits_link(repo):
+            buttons.append([{"text": self.strings["btn_commits"], "url": link}])
 
-        if inline_ready and await self.inline.form(text, message=message, reply_markup=buttons):
-            return
-
-        prefix = self.client.dispatcher.prefixes[0]
-        tail = f"\n\n<i>Обновиться:</i> <code>{prefix}update</code>"
-
+        # Команду .upcheck отвечаем туда, где её позвали
         if message is not None:
-            await utils.answer(message, text + tail)
+            if self._bot_alive() and await self.inline.form(
+                text,
+                message=message,
+                reply_markup=buttons,
+                ttl=NOTIFY_TTL,
+            ):
+                return
+
+            await utils.answer(message, text + self._hint())
             return
 
-        await self.client.send_message("me", text + tail)
+        # Сама проверка стучится в личку бота — там кнопка под рукой
+        if await self._notify(text, buttons):
+            return
+
+        await self.client.send_message("me", text + self._hint())
+
+    async def _notify(self, text: str, buttons=None) -> bool:
+        """Написать в личку собственного бота. False — если бот недоступен."""
+        if not self._bot_alive():
+            return False
+
+        return bool(
+            await self.inline.send_pm_unit(
+                self.client.tg_id,
+                text,
+                buttons,
+                photo=self.config["banner_url"] or None,
+                ttl=NOTIFY_TTL,
+            )
+        )
+
+    async def _report_update(self) -> None:
+        """После перезапуска рассказать, что именно обновилось."""
+        report = self.get("update_report") or {}
+        self.set("update_report", None)
+
+        # Ждём, пока поднимется бот — отчёт должен прийти именно в него
+        for _ in range(30):
+            if self._bot_alive():
+                break
+
+            await asyncio.sleep(2)
+
+        changelog = self._changelog_from(
+            report.get("changelog") or [],
+            report.get("extra", 0),
+        )
+        text = self.strings["updated"].format(
+            versions=self._versions_text(
+                report.get("from_version", ""),
+                report.get("to_version", ""),
+                report.get("from_commit", ""),
+                report.get("to_commit", ""),
+            ),
+            changelog=changelog,
+        )
+
+        if not await self._notify(text):
+            with contextlib.suppress(Exception):
+                await self.client.send_message("me", text)
 
     async def _cb_update(self, call) -> None:
         await call.answer(self.strings["updating"])
-        sent = await self.client.send_message("me", self.strings["updating"])
 
         with contextlib.suppress(Exception):
-            await call.delete()
+            await call.edit(self.strings["updating"], reply_markup=[])
 
-        await self._update(sent)
+        await self._update(None)
 
     async def _cb_later(self, call) -> None:
         await call.answer(self.strings["later"])
         await call.delete()
+
+    # ------------------------------------------------------------------ #
+    #  Тексты
+    # ------------------------------------------------------------------ #
+    def _hint(self) -> str:
+        return self.strings["hint"].format(self.client.dispatcher.prefixes[0])
+
+    def _bot_alive(self) -> bool:
+        return self.inline is not None and self.inline.init_complete
+
+    @staticmethod
+    def _headline(commit) -> str:
+        return commit.message.strip().splitlines()[0]
+
+    def _changelog(self, commits) -> str:
+        headlines = [self._headline(commit) for commit in commits[:CHANGELOG_LIMIT]]
+        return self._changelog_from(headlines, max(len(commits) - CHANGELOG_LIMIT, 0))
+
+    def _changelog_from(self, headlines: list, extra: int = 0) -> str:
+        if not headlines:
+            return self.strings["changelog_empty"]
+
+        listing = "\n".join(f"▫️ {utils.escape_html(line)}" for line in headlines)
+        text = self.strings["changelog"].format(listing)
+
+        if extra > 0:
+            text += self.strings["changelog_more"].format(extra)
+
+        return text
+
+    def _versions_text(self, current: str, latest: str, old: str, new: str) -> str:
+        """Строчки «Версия» и «Сборка» — версии словами, хеши отдельно."""
+        if latest and latest != current:
+            return self.strings["versions_new"].format(current, latest, old, new)
+
+        return self.strings["versions_same"].format(current or __version_str__, old, new)
+
+    async def _versions(self, repo, commits) -> str:
+        branch = self._branch(repo)
+        old = repo.head.commit.hexsha[:8]
+        new = commits[0].hexsha[:8] if commits else old
+
+        return self._versions_text(
+            __version_str__,
+            await self._remote_version(repo, branch),
+            old,
+            new,
+        )
 
     # ------------------------------------------------------------------ #
     #  Работа с git
@@ -259,54 +426,111 @@ class UpdaterMod(loader.Module):
             return None
 
     @staticmethod
-    def _headline(commit) -> str:
-        return commit.message.strip().splitlines()[0]
+    def _branch(repo) -> str:
+        with contextlib.suppress(Exception):
+            return repo.active_branch.name
+
+        return "main"
+
+    @staticmethod
+    def _commits_link(repo) -> str:
+        """Ссылка на список коммитов — кнопкой под уведомлением."""
+        with contextlib.suppress(Exception):
+            url = next(repo.remote().urls, "") or DEFAULT_REPO
+
+            if url.startswith("http"):
+                return f"{url.removesuffix('.git')}/commits"
+
+        return ""
+
+    @staticmethod
+    def _parse_version(source: str) -> str:
+        match = VERSION_RE.search(source or "")
+        return ".".join(match.groups()) if match else ""
+
+    async def _remote_version(self, repo, branch: str) -> str:
+        """Версия, которая лежит на сервере — читаем version.py из origin."""
+        try:
+            source = await utils.run_sync(
+                repo.git.show,
+                f"origin/{branch}:soika/version.py",
+            )
+        except Exception:  # noqa: BLE001 — файла может не быть в старых сборках
+            return ""
+
+        return self._parse_version(source)
+
+    def _installed_version(self) -> str:
+        """Версия из файлов на диске — после git reset она уже новая."""
+        path = configuration.repo_root() / "soika" / "version.py"
+
+        try:
+            return self._parse_version(path.read_text(encoding="utf-8"))
+        except OSError:
+            return ""
 
     async def _new_commits(self, repo) -> list:
         """Коммиты, которые есть на сервере, но не у нас."""
         try:
             await utils.run_sync(repo.remote().fetch)
-            branch = repo.active_branch.name
-            return list(repo.iter_commits(f"HEAD..origin/{branch}"))
-        except Exception:
-            logger.debug("Проверка обновлений не удалась", exc_info=True)
+            return list(repo.iter_commits(f"HEAD..origin/{self._branch(repo)}"))
+        except Exception as e:
+            # Раньше это глушилось в debug — и молчание было неотличимо от «всё ок»
+            logger.warning("Проверка обновлений не удалась: %s", e, exc_info=True)
             return []
 
-    async def _update(self, message, repo=None) -> None:
+    # ------------------------------------------------------------------ #
+    #  Само обновление
+    # ------------------------------------------------------------------ #
+    async def _update(self, message, repo=None, commits=None) -> None:
         """Подтянуть новую версию, поставить зависимости и перезапуститься."""
         repo = repo or self._repo()
 
         if repo is None:
-            await utils.answer(message, self.strings["no_git"])
+            await self._say(message, self.strings["no_git"])
             return
 
         old = repo.head.commit.hexsha
 
         try:
-            await utils.run_sync(repo.remote().fetch)
-            branch = repo.active_branch.name
-            await utils.run_sync(repo.git.reset, "--hard", f"origin/{branch}")
+            if commits is None:
+                commits = await self._new_commits(repo)
+
+            await utils.run_sync(repo.git.reset, "--hard", f"origin/{self._branch(repo)}")
         except Exception as e:  # noqa: BLE001 — покажем причину пользователю
-            await utils.answer(message, self.strings["failed"].format(utils.escape_html(str(e))))
+            await self._say(message, self.strings["failed"].format(utils.escape_html(str(e))))
             return
 
         new = repo.head.commit.hexsha
 
         if old == new:
-            await utils.answer(message, self.strings["up_to_date"].format(old[:8]))
+            await self._say(message, self.strings["up_to_date"].format(old[:8]))
             return
 
-        await utils.answer(message, self.strings["deps"])
-        await self._install_requirements()
-
-        await self._restart(
-            message,
-            self.strings["updated"].format(
-                old[:8],
-                new[:8],
-                utils.escape_html(self._headline(repo.head.commit)),
-            ),
+        # Что рассказать после перезапуска — в процессе уже нового кода
+        self.set(
+            "update_report",
+            {
+                "from_version": __version_str__,
+                "to_version": self._installed_version(),
+                "from_commit": old[:8],
+                "to_commit": new[:8],
+                "changelog": [self._headline(commit) for commit in commits[:CHANGELOG_LIMIT]],
+                "extra": max(len(commits) - CHANGELOG_LIMIT, 0),
+            },
         )
+
+        await self._say(message, self.strings["deps"])
+        await self._install_requirements()
+        await self._restart(message, self.strings["restarting"])
+
+    async def _say(self, message, text: str) -> None:
+        """Промежуточный статус: в чат, если команду позвали руками."""
+        if message is None:
+            logger.info("%s", utils.remove_html(text))
+            return
+
+        await utils.answer(message, text)
 
     async def _install_requirements(self) -> None:
         requirements = configuration.repo_root() / "requirements.txt"
@@ -328,20 +552,22 @@ class UpdaterMod(loader.Module):
         await process.wait()
 
     async def _restart(self, message, text: str) -> None:
-        sent = await utils.answer(message, text)
+        if message is not None:
+            sent = await utils.answer(message, text)
 
-        if isinstance(sent, list):
-            sent = sent[0]
+            if isinstance(sent, list):
+                sent = sent[0]
 
-        self.db.set(
-            CORE,
-            "restart_info",
-            {
-                "chat": utils.get_chat_id(sent) if hasattr(sent, "peer_id") else None,
-                "message": getattr(sent, "id", None),
-                "started": time.time(),
-            },
-        )
+            self.db.set(
+                CORE,
+                "restart_info",
+                {
+                    "chat": utils.get_chat_id(sent) if hasattr(sent, "peer_id") else None,
+                    "message": getattr(sent, "id", None),
+                    "started": time.time(),
+                },
+            )
+
         await self.db.flush()
 
         # Гасим бота вежливо: иначе его getUpdates ещё минуту держит Telegram,

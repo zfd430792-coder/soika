@@ -257,9 +257,7 @@ class UnitsMixin:
                     InlineKeyboardButton(text="➡️", callback_data=f"{unit.id}:{NAV_NEXT}"),
                 ]
             )
-            rows.append(
-                [InlineKeyboardButton(text="🗑", callback_data=f"{unit.id}:{NAV_CLOSE}")]
-            )
+            rows.append([InlineKeyboardButton(text="🗑", callback_data=f"{unit.id}:{NAV_CLOSE}")])
 
         if not rows:
             return None
@@ -340,35 +338,59 @@ class UnitsMixin:
         text: str,
         reply_markup: typing.Any = None,
         *,
+        photo: str | None = None,
         ttl: float = DEFAULT_TTL,
         on_unload: typing.Callable | None = None,
     ) -> InlineMessage | bool:
-        """Сообщение с кнопками прямо в личку бота (без инлайн-запроса)."""
+        """Сообщение с кнопками прямо в личку бота (без инлайн-запроса).
+
+        С ``photo`` уходит картинкой с подписью — если текст в подпись влезает.
+        """
         if not self.init_complete:
             return False
+
+        if photo and len(utils.remove_html(text)) > utils.CAPTION_LIMIT:
+            photo = None
 
         unit = InlineUnit(
             id=utils.rand(10),
             kind="form",
             owner=self._client.tg_id,
             text=text,
+            photo=photo,
             buttons=normalize_buttons(reply_markup),
             ttl=ttl,
             on_unload=on_unload,
         )
         self._units[unit.id] = unit
 
-        try:
-            sent = await self.bot.send_message(
-                chat_id,
-                text,
-                parse_mode="HTML",
-                reply_markup=self.build_markup(unit),
-            )
-        except Exception as e:  # noqa: BLE001
-            logger.error("Не смог написать в личку бота: %s", e)
-            self._units.pop(unit.id, None)
-            return False
+        sent = None
+
+        if photo:
+            try:
+                sent = await self.bot.send_photo(
+                    chat_id,
+                    photo,
+                    caption=text,
+                    parse_mode="HTML",
+                    reply_markup=self.build_markup(unit),
+                )
+            except Exception as e:  # noqa: BLE001 — картинка не должна съедать текст
+                logger.warning("Баннер %s не отправился, шлю текстом: %s", photo, e)
+                unit.photo = photo = None
+
+        if sent is None:
+            try:
+                sent = await self.bot.send_message(
+                    chat_id,
+                    text,
+                    parse_mode="HTML",
+                    reply_markup=self.build_markup(unit),
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.error("Не смог написать в личку бота: %s", e)
+                self._units.pop(unit.id, None)
+                return False
 
         unit.bot_chat = sent.chat.id
         unit.bot_message = sent.message_id
