@@ -45,7 +45,7 @@ class UpdaterMod(loader.Module):
             "🚫 <b>Это не git-репозиторий или не настроен remote.</b>\n"
             "<i>Обновляться неоткуда — переустанови Сойку через install.sh</i>"
         ),
-        "up_to_date": "✅ <b>Уже последняя версия</b> (сборка <code>{}</code>)",
+        "up_to_date": "✅ <b>Уже последняя версия</b>\n🕸 <b>Сойка {}</b> · сборка <code>{}</code>",
         "deps": "🪶 <b>Ставлю зависимости...</b>",
         "failed": "🚫 <b>Обновление не удалось:</b>\n<code>{}</code>",
         "available": (
@@ -67,7 +67,7 @@ class UpdaterMod(loader.Module):
         "changelog_more": "\n<i>…и ещё коммитов: {}</i>",
         "changelog_empty": "<i>Список изменений недоступен</i>",
         "check_now": "🔎 <b>Проверяю обновления...</b>",
-        "no_updates": "✅ <b>Обновлений нет</b> (сборка <code>{}</code>)",
+        "no_updates": "✅ <b>Обновлений нет</b>\n🕸 <b>Сойка {}</b> · сборка <code>{}</code>",
         "auto_on": "🤖 <b>Автообновление включено</b> — буду обновляться сам",
         "auto_off": "✋ <b>Автообновление выключено</b> — только по команде",
         "later": "Ладно, потом",
@@ -81,7 +81,7 @@ class UpdaterMod(loader.Module):
         "restarting": "🪶 <b>Restarting...</b>",
         "updating": "🪶 <b>Updating...</b>",
         "no_git": "🚫 <b>Not a git repository or no remote configured</b>",
-        "up_to_date": "✅ <b>Already up to date</b> (build <code>{}</code>)",
+        "up_to_date": "✅ <b>Already up to date</b>\n🕸 <b>Soika {}</b> · build <code>{}</code>",
         "deps": "🪶 <b>Installing requirements...</b>",
         "failed": "🚫 <b>Update failed:</b>\n<code>{}</code>",
         "available": (
@@ -103,7 +103,7 @@ class UpdaterMod(loader.Module):
         "changelog_more": "\n<i>…and {} more commits</i>",
         "changelog_empty": "<i>Changelog is not available</i>",
         "check_now": "🔎 <b>Checking for updates...</b>",
-        "no_updates": "✅ <b>No updates</b> (build <code>{}</code>)",
+        "no_updates": "✅ <b>No updates</b>\n🕸 <b>Soika {}</b> · build <code>{}</code>",
         "auto_on": "🤖 <b>Auto update enabled</b>",
         "auto_off": "✋ <b>Auto update disabled</b>",
         "later": "Fine, later",
@@ -194,7 +194,7 @@ class UpdaterMod(loader.Module):
         if not commits:
             await utils.answer(
                 message,
-                self.strings["no_updates"].format(repo.head.commit.hexsha[:8]),
+                self.strings["no_updates"].format(__version_str__, repo.head.commit.hexsha[:8]),
             )
             return
 
@@ -504,7 +504,10 @@ class UpdaterMod(loader.Module):
         new = repo.head.commit.hexsha
 
         if old == new:
-            await self._say(message, self.strings["up_to_date"].format(old[:8]))
+            await self._say(
+                message,
+                self.strings["up_to_date"].format(__version_str__, old[:8]),
+            )
             return
 
         # Что рассказать после перезапуска — в процессе уже нового кода
