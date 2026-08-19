@@ -215,7 +215,6 @@ class BackupMod(loader.Module):
 
     def __init__(self) -> None:
         self._channel = None
-        self._link = ""
 
     async def client_ready(self, client, db):
         # При первой установке спрашиваем про бэкап — молча его не включаем
@@ -765,10 +764,13 @@ class BackupMod(loader.Module):
         return self._channel
 
     async def _channel_link(self) -> str:
-        if not self._link and (channel := await self._ensure_channel()):
-            self._link = await channels.channel_link(self.client, channel)
+        """Ссылка на канал бэкапов — сразу на последнюю копию, если она есть."""
+        channel = await self._ensure_channel()
 
-        return self._link
+        if channel is None:
+            return ""
+
+        return await channels.channel_link(self.client, channel, self.get("last_message", 1))
 
     async def _send_backup(self) -> None:
         payload, caption = self._payload()
@@ -777,7 +779,11 @@ class BackupMod(loader.Module):
         if self.config["target"] == "channel" and (channel := await self._ensure_channel()):
             target = channel
 
-        await self.client.send_file(target, payload, caption=caption)
+        sent = await self.client.send_file(target, payload, caption=caption)
+
+        # Кнопка «Открыть канал» ведёт на свежую копию
+        if target != "me" and getattr(sent, "id", None):
+            self.set("last_message", sent.id)
 
         self.set("last_backup", time.time())
         self.set("last_daily", datetime.now().strftime("%Y-%m-%d"))

@@ -111,12 +111,17 @@ async def find_by_title(client: typing.Any, title: str) -> typing.Any:
     return None
 
 
-async def channel_link(client: typing.Any, channel: typing.Any) -> str:
-    """Ссылка на канал — её показываем пользователю."""
+async def channel_link(client: typing.Any, channel: typing.Any, message_id: int = 1) -> str:
+    """Ссылка на канал — её показываем пользователю и вешаем на кнопки.
+
+    У приватного канала ссылка обязана заканчиваться номером сообщения:
+    без него Telegram не узнаёт свою же ссылку и открывает её в браузере,
+    где она, разумеется, ничего не находит.
+    """
     if getattr(channel, "username", None):
         return f"https://t.me/{channel.username}"
 
-    return f"https://t.me/c/{channel.id}"
+    return f"https://t.me/c/{channel.id}/{max(int(message_id), 1)}"
 
 
 async def set_avatar(client: typing.Any, channel: typing.Any, url: str) -> None:
