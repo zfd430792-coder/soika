@@ -1,5 +1,7 @@
 """Выполнение Python-кода прямо из чата."""
 
+# meta banner: https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/eval_banner.png
+
 import time
 import typing
 

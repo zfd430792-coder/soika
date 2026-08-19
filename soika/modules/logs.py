@@ -1,5 +1,7 @@
 """Логи: файлом по команде и потоком в служебный канал."""
 
+# meta banner: https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/logs_banner.png
+
 import contextlib
 import io
 import logging

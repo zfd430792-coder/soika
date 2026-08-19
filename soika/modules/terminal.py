@@ -1,5 +1,7 @@
 """Выполнение команд операционной системы."""
 
+# meta banner: https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/terminal_banner.png
+
 import asyncio
 import contextlib
 import os

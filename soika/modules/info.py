@@ -1,5 +1,7 @@
 """Карточка юзербота: версия, аптайм, нагрузка — и баннер над ней."""
 
+# meta banner: https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/info_banner.png
+
 import time
 
 from .. import loader, utils
@@ -8,7 +10,7 @@ from ..version import BRAND, BRAND_EMOJI, DEFAULT_REPO, __version_str__
 #: Баннер над .info по умолчанию. Годится любая ссылка на картинку, гифку или
 #: mp4 — Telegram сам решит, показать это фото или анимацию.
 DEFAULT_BANNER = (
-    "https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/welcome_banner.png"
+    "https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/info_banner.png"
 )
 
 

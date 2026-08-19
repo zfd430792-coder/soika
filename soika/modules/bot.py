@@ -1,5 +1,7 @@
 """Собственный бот Сойки: меню в личке и управление ботом."""
 
+# meta banner: https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/bot_banner.png
+
 import asyncio
 import contextlib
 import logging

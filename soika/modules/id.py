@@ -1,5 +1,7 @@
 """Показывает ID чата, пользователя и сообщения."""
 
+# meta banner: https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/id_banner.png
+
 # meta developer: @soika
 # meta description: ID чата, пользователя и сообщения одной командой
 

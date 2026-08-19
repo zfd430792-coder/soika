@@ -1,5 +1,7 @@
 """Справка по модулям и командам."""
 
+# meta banner: https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/help_banner.png
+
 from .. import loader, utils
 
 

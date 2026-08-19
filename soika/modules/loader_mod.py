@@ -1,5 +1,7 @@
 """Установка, обновление и выгрузка модулей."""
 
+# meta banner: https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/loader_banner.png
+
 import aiohttp
 
 from .. import loader, utils

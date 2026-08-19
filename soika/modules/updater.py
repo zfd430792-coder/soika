@@ -1,5 +1,7 @@
 """Обновление из git, перезапуск и уведомления о новых версиях."""
 
+# meta banner: https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/update_banner.png
+
 import asyncio
 import contextlib
 import logging

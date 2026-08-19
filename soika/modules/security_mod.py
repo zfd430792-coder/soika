@@ -1,5 +1,7 @@
 """Кто может выполнять команды: sudo, support и маски прав."""
 
+# meta banner: https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/security_banner.png
+
 from .. import loader, security, utils
 
 

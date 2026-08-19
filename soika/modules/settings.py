@@ -1,5 +1,7 @@
 """Настройки юзербота: префикс, алиасы, язык, сообщение при запуске."""
 
+# meta banner: https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/settings_banner.png
+
 from .. import loader, utils
 
 SETTINGS = "soika.settings"

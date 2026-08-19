@@ -1,5 +1,7 @@
 """Редактор настроек модулей — с кнопками, прямо в чате."""
 
+# meta banner: https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/config_banner.png
+
 from .. import loader, utils
 from ..inline.types import InlineCall
 from ..validators import ValidationError

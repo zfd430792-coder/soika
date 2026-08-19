@@ -4,6 +4,8 @@
 или при первом запуске, когда Сойка сама спрашивает, когда бэкапить.
 """
 
+# meta banner: https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/backup_banner.png
+
 import asyncio
 import contextlib
 import io
