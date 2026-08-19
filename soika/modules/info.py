@@ -29,8 +29,10 @@ class InfoMod(loader.Module):
             "🔄 <b>Нагрузка CPU:</b> {cpu} %\n"
             "👾 <b>Нагрузка RAM:</b> {ram} МБ\n\n"
             "💾 <b>Установлен:</b> {platform}\n"
-            '🕸 <b>Сборка:</b> <code>{build}</code> · <a href="{repo}">исходники</a>'
+            "{source}"
         ),
+        "source_dated": '🕸 <b>Сборка от</b> {} · <a href="{}">исходники</a>',
+        "source_plain": '🕸 <a href="{}">исходники</a>',
         "ping": ("🏓 <b>Задержка:</b> <code>{latency} мс</code>\n⏰ <b>Аптайм:</b> {uptime}"),
     }
 
@@ -44,8 +46,10 @@ class InfoMod(loader.Module):
             "🔄 <b>CPU usage:</b> {cpu} %\n"
             "👾 <b>RAM usage:</b> {ram} MB\n\n"
             "💾 <b>Running on:</b> {platform}\n"
-            '🕸 <b>Build:</b> <code>{build}</code> · <a href="{repo}">sources</a>'
+            "{source}"
         ),
+        "source_dated": '🕸 <b>Built on</b> {} · <a href="{}">sources</a>',
+        "source_plain": '🕸 <a href="{}">sources</a>',
         "ping": ("🏓 <b>Ping:</b> <code>{latency} ms</code>\n⏰ <b>Uptime:</b> {uptime}"),
     }
 
@@ -63,8 +67,8 @@ class InfoMod(loader.Module):
             "custom_message",
             None,
             "Свой текст вместо стандартного. Подстановки: {owner} {version} {build}"
-            " {prefix} {uptime} {cpu} {ram} {platform} {modules} {commands} {brand}"
-            " {emoji} {repo}",
+            " (дата сборки) {commit} {source} {prefix} {uptime} {cpu} {ram} {platform}"
+            " {modules} {commands} {brand} {emoji} {repo}",
             validator=loader.validators.Union(
                 loader.validators.NoneType(),
                 loader.validators.String(),
@@ -111,7 +115,8 @@ class InfoMod(loader.Module):
             return self.strings["info"].format(**values)
 
     async def _values(self) -> dict:
-        commit, url = await utils.run_sync(utils.get_git_info)
+        commit, built, url = await utils.run_sync(utils.get_build)
+        link = utils.build_link(url, commit) or DEFAULT_REPO
         me = self.client.soika_me
 
         return {
@@ -129,6 +134,12 @@ class InfoMod(loader.Module):
             "cpu": await utils.run_sync(utils.get_cpu_usage),
             "ram": utils.get_ram_usage(),
             "platform": utils.get_named_platform(),
-            "build": commit[:8] if commit else "—",
-            "repo": url or DEFAULT_REPO,
+            "build": built,
+            "commit": commit,
+            "repo": link,
+            "source": (
+                self.strings["source_dated"].format(built, link)
+                if built
+                else self.strings["source_plain"].format(link)
+            ),
         }

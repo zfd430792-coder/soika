@@ -47,7 +47,7 @@ class UpdaterMod(loader.Module):
             "🚫 <b>Это не git-репозиторий или не настроен remote.</b>\n"
             "<i>Обновляться неоткуда — переустанови Сойку через install.sh</i>"
         ),
-        "up_to_date": "✅ <b>Уже последняя версия</b>\n🕸 <b>Сойка {}</b> · сборка <code>{}</code>",
+        "up_to_date": "✅ <b>Уже последняя версия</b> — <b>Сойка {}</b>",
         "deps": "🪶 <b>Ставлю зависимости...</b>",
         "failed": "🚫 <b>Обновление не удалось:</b>\n<code>{}</code>",
         "available": (
@@ -58,18 +58,13 @@ class UpdaterMod(loader.Module):
         ),
         "auto_updating": "🤖 <b>Нашлось обновление — обновляюсь сам</b>\n\n{versions}\n\n{changelog}",
         "updated": "✅ <b>Сойка обновлена</b>\n\n{versions}\n\n{changelog}",
-        "versions_new": (
-            "🕸 <b>Версия:</b> <code>{}</code> → <code>{}</code>\n"
-            "🔖 <b>Сборка:</b> <code>{}</code> → <code>{}</code>"
-        ),
-        "versions_same": (
-            "🕸 <b>Версия:</b> <code>{}</code>\n🔖 <b>Сборка:</b> <code>{}</code> → <code>{}</code>"
-        ),
+        "versions_new": "🕸 <b>Версия:</b> <code>{}</code> → <code>{}</code>",
+        "versions_same": "🕸 <b>Версия:</b> <code>{}</code> <i>(номер не менялся)</i>",
         "changelog": "📝 <b>Что изменилось:</b>\n{}",
         "changelog_more": "\n<i>…и ещё коммитов: {}</i>",
         "changelog_empty": "<i>Список изменений недоступен</i>",
         "check_now": "🔎 <b>Проверяю обновления...</b>",
-        "no_updates": "✅ <b>Обновлений нет</b>\n🕸 <b>Сойка {}</b> · сборка <code>{}</code>",
+        "no_updates": "✅ <b>Обновлений нет</b> — <b>Сойка {}</b>",
         "auto_on": "🤖 <b>Автообновление включено</b> — буду обновляться сам",
         "auto_off": "✋ <b>Автообновление выключено</b> — только по команде",
         "later": "Ладно, потом",
@@ -83,7 +78,7 @@ class UpdaterMod(loader.Module):
         "restarting": "🪶 <b>Restarting...</b>",
         "updating": "🪶 <b>Updating...</b>",
         "no_git": "🚫 <b>Not a git repository or no remote configured</b>",
-        "up_to_date": "✅ <b>Already up to date</b>\n🕸 <b>Soika {}</b> · build <code>{}</code>",
+        "up_to_date": "✅ <b>Already up to date</b> — <b>Soika {}</b>",
         "deps": "🪶 <b>Installing requirements...</b>",
         "failed": "🚫 <b>Update failed:</b>\n<code>{}</code>",
         "available": (
@@ -94,18 +89,13 @@ class UpdaterMod(loader.Module):
         ),
         "auto_updating": "🤖 <b>Found an update, updating myself</b>\n\n{versions}\n\n{changelog}",
         "updated": "✅ <b>Soika updated</b>\n\n{versions}\n\n{changelog}",
-        "versions_new": (
-            "🕸 <b>Version:</b> <code>{}</code> → <code>{}</code>\n"
-            "🔖 <b>Build:</b> <code>{}</code> → <code>{}</code>"
-        ),
-        "versions_same": (
-            "🕸 <b>Version:</b> <code>{}</code>\n🔖 <b>Build:</b> <code>{}</code> → <code>{}</code>"
-        ),
+        "versions_new": "🕸 <b>Version:</b> <code>{}</code> → <code>{}</code>",
+        "versions_same": "🕸 <b>Version:</b> <code>{}</code> <i>(number unchanged)</i>",
         "changelog": "📝 <b>What changed:</b>\n{}",
         "changelog_more": "\n<i>…and {} more commits</i>",
         "changelog_empty": "<i>Changelog is not available</i>",
         "check_now": "🔎 <b>Checking for updates...</b>",
-        "no_updates": "✅ <b>No updates</b>\n🕸 <b>Soika {}</b> · build <code>{}</code>",
+        "no_updates": "✅ <b>No updates</b> — <b>Soika {}</b>",
         "auto_on": "🤖 <b>Auto update enabled</b>",
         "auto_off": "✋ <b>Auto update disabled</b>",
         "later": "Fine, later",
@@ -196,7 +186,7 @@ class UpdaterMod(loader.Module):
         if not commits:
             await utils.answer(
                 message,
-                self.strings["no_updates"].format(__version_str__, repo.head.commit.hexsha[:8]),
+                self.strings["no_updates"].format(__version_str__),
             )
             return
 
@@ -217,14 +207,16 @@ class UpdaterMod(loader.Module):
     @loader.command()
     async def versioncmd(self, message):
         """— какая версия Сойки установлена"""
-        commit, url = utils.get_git_info()
+        commit, built, url = await utils.run_sync(utils.get_build)
+        link = utils.build_link(url, commit)
+
         text = f"🪶 <b>Сойка {__version_str__}</b>"
 
-        if commit:
-            text += f"\n🔖 <b>Сборка:</b> <code>{commit[:8]}</code>"
+        if built:
+            text += f"\n📅 <b>Сборка от</b> {built}"
 
-        if url:
-            text += f"\n🕸 <b>Репозиторий:</b> {utils.escape_html(url)}"
+        if link:
+            text += f'\n🕸 <a href="{link}">исходники</a>'
 
         auto = self.strings["auto_on"] if self.config["auto_update"] else self.strings["auto_off"]
         await utils.answer(message, f"{text}\n\n{auto}")
@@ -257,7 +249,7 @@ class UpdaterMod(loader.Module):
             logger.info("Найдено обновление %s — обновляюсь сам", commits[0].hexsha[:8])
             await self._notify(
                 self.strings["auto_updating"].format(
-                    versions=await self._versions(repo, commits),
+                    versions=await self._versions(repo),
                     changelog=self._changelog(commits),
                 )
             )
@@ -276,7 +268,7 @@ class UpdaterMod(loader.Module):
     async def _offer(self, commits, repo, message=None) -> None:
         """Показать, что вышло обновление, и дать кнопку «Обновить»."""
         text = self.strings["available"].format(
-            versions=await self._versions(repo, commits),
+            versions=await self._versions(repo),
             count=len(commits),
             changelog=self._changelog(commits),
         )
@@ -344,8 +336,6 @@ class UpdaterMod(loader.Module):
             versions=self._versions_text(
                 report.get("from_version", ""),
                 report.get("to_version", ""),
-                report.get("from_commit", ""),
-                report.get("to_commit", ""),
             ),
             changelog=changelog,
         )
@@ -395,23 +385,17 @@ class UpdaterMod(loader.Module):
 
         return text
 
-    def _versions_text(self, current: str, latest: str, old: str, new: str) -> str:
-        """Строчки «Версия» и «Сборка» — версии словами, хеши отдельно."""
+    def _versions_text(self, current: str, latest: str) -> str:
+        """Строчка «Версия» — номерами, без хешей: их читать невозможно."""
         if latest and latest != current:
-            return self.strings["versions_new"].format(current, latest, old, new)
+            return self.strings["versions_new"].format(current, latest)
 
-        return self.strings["versions_same"].format(current or __version_str__, old, new)
+        return self.strings["versions_same"].format(current or __version_str__)
 
-    async def _versions(self, repo, commits) -> str:
-        branch = self._branch(repo)
-        old = repo.head.commit.hexsha[:8]
-        new = commits[0].hexsha[:8] if commits else old
-
+    async def _versions(self, repo) -> str:
         return self._versions_text(
             __version_str__,
-            await self._remote_version(repo, branch),
-            old,
-            new,
+            await self._remote_version(repo, self._branch(repo)),
         )
 
     # ------------------------------------------------------------------ #
@@ -508,7 +492,7 @@ class UpdaterMod(loader.Module):
         if old == new:
             await self._say(
                 message,
-                self.strings["up_to_date"].format(__version_str__, old[:8]),
+                self.strings["up_to_date"].format(__version_str__),
             )
             return
 
@@ -518,8 +502,6 @@ class UpdaterMod(loader.Module):
             {
                 "from_version": __version_str__,
                 "to_version": self._installed_version(),
-                "from_commit": old[:8],
-                "to_commit": new[:8],
                 "changelog": [self._headline(commit) for commit in commits[:CHANGELOG_LIMIT]],
                 "extra": max(len(commits) - CHANGELOG_LIMIT, 0),
             },

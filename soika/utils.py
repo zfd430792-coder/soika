@@ -506,6 +506,37 @@ def get_cpu_usage() -> float:
         return 0.0
 
 
+def get_build() -> tuple[str, str, str]:
+    """(короткий хеш, дата сборки, адрес репозитория) — для .info и .version.
+
+    Хеш нужен ссылке на коммит, а человеку показываем дату: «сборка от 19.08.2026»
+    читается, а «сборка a3f9c2e1» — нет.
+    """
+    try:
+        from git import Repo
+
+        repo = Repo(repo_root())
+        commit = repo.head.commit
+
+        return (
+            commit.hexsha[:8],
+            commit.committed_datetime.strftime("%d.%m.%Y"),
+            next(repo.remote().urls, ""),
+        )
+    except Exception:  # noqa: BLE001 — git может отсутствовать целиком
+        return "", "", ""
+
+
+def build_link(url: str, commit: str = "") -> str:
+    """Ссылка на исходники: на конкретный коммит, если он известен."""
+    url = str(url or "").removesuffix(".git").rstrip("/")
+
+    if not url.startswith("http"):
+        return ""
+
+    return f"{url}/commit/{commit}" if commit else url
+
+
 def get_git_info() -> tuple[str | None, str]:
     """(хеш коммита, ссылка на репозиторий) — для .info и обновлятора."""
     try:
@@ -532,6 +563,7 @@ __all__ = [
     "answer_file",
     "answer_with_banner",
     "array_sum",
+    "build_link",
     "censor",
     "check_url",
     "chunks",
@@ -546,6 +578,7 @@ __all__ = [
     "get_args_split_by",
     "get_banner",
     "get_base_dir",
+    "get_build",
     "get_chat_id",
     "get_cpu_usage",
     "get_data_dir",
