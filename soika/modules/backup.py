@@ -13,11 +13,12 @@ import json
 import logging
 import time
 import typing
+import zipfile
 from datetime import datetime
+from pathlib import Path
 
 from .. import channels, loader, utils
 from ..inline.core import BACKUP_CALLBACK
-from ..version import __version_str__
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +32,14 @@ TIME_CHOICES = ["00:00", "03:00", "06:00", "09:00", "12:00", "15:00", "18:00", "
 
 BANNER = "https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/backup_banner.png"
 
-#: Служебный раздел в файле бэкапа: чей он и когда снят
+#: Подпись, которую оставляли версии 1.5.1 — при восстановлении её выбрасываем
 MARKER = "soika.backup"
+
+#: Карта «модуль → ссылка» внутри архива с модулями
+MODS_MAP = "modules.json"
+
+#: Раздел базы с токеном инлайн-бота: из чужой копии он не переносится
+INLINE_OWNER = "soika.inline"
 
 ASK_DELAY = 12
 
@@ -43,21 +50,29 @@ class BackupMod(loader.Module):
 
     strings = {
         "name": "Бэкап",
-        "caption": "🪶 <b>Бэкап базы Сойки</b>\n<b>Разделов:</b> {} · <b>время:</b> {}",
+        "caption": (
+            "🪶 <b>Резервная копия базы Сойки</b>\n"
+            "<b>Разделов:</b> {} · <b>снята:</b> {}\n\n"
+            "<i>Внутри настройки, модули и доступы — не пересылай её никому.</i>\n"
+            "<b>Восстановить:</b> <code>{}restoredb</code> ответом на этот файл"
+        ),
+        "backup_sent": "🗂 <b>Копия базы отправлена в «Избранное»</b>",
+        "mods_caption": (
+            "🗂 <b>Бэкап модулей: {}</b>\n\n"
+            "<b>Восстановить:</b> <code>{}restoremods</code> ответом на этот файл"
+        ),
+        "no_mods": "🚫 <b>Своих модулей нет — архивировать нечего</b>",
+        "mods_restored": "✅ <b>Модулей восстановлено: {}</b>",
+        "bad_mods": "🚫 <b>Это не похоже на архив с модулями Сойки</b>",
         "no_file": "🚫 <b>Ответь на файл с бэкапом</b>",
         "restored": (
             "✅ <b>База восстановлена</b> — разделов: {}\n"
             "<i>Прежняя копия отложена рядом с базой, файл</i> "
-            "<code>db-….json.rev1</code>\n\n"
-            "<b>Перезапусти Сойку:</b> <code>{}restart</code>"
+            "<code>db-….json.rev1</code>"
         ),
         "bad_file": (
             "🚫 <b>Это не похоже на бэкап базы Сойки</b>\n"
             "<i>Восстанавливать нечего — база осталась как была.</i>"
-        ),
-        "foreign": (
-            "🚫 <b>Это бэкап другого аккаунта</b>\n"
-            "<i>В нём чужой инлайн-бот и чужие каналы — сюда его ставить нельзя.</i>"
         ),
         "title": "🗄 <b>Бэкап базы</b>",
         "title_first_run": (
@@ -102,21 +117,29 @@ class BackupMod(loader.Module):
     }
 
     strings_en = {
-        "caption": "🪶 <b>Soika database backup</b>\n<b>Sections:</b> {} · <b>time:</b> {}",
+        "caption": (
+            "🪶 <b>Soika database backup</b>\n"
+            "<b>Sections:</b> {} · <b>taken:</b> {}\n\n"
+            "<i>It holds your settings, modules and access lists — do not forward it.</i>\n"
+            "<b>Restore:</b> <code>{}restoredb</code> in reply to this file"
+        ),
+        "backup_sent": "🗂 <b>Database copy sent to Saved Messages</b>",
+        "mods_caption": (
+            "🗂 <b>Modules backup: {}</b>\n\n"
+            "<b>Restore:</b> <code>{}restoremods</code> in reply to this file"
+        ),
+        "no_mods": "🚫 <b>No user modules to archive</b>",
+        "mods_restored": "✅ <b>Modules restored: {}</b>",
+        "bad_mods": "🚫 <b>This does not look like a Soika modules archive</b>",
         "no_file": "🚫 <b>Reply to a backup file</b>",
         "restored": (
             "✅ <b>Database restored</b> — sections: {}\n"
             "<i>The previous copy is kept next to the database as</i> "
-            "<code>db-….json.rev1</code>\n\n"
-            "<b>Restart Soika:</b> <code>{}restart</code>"
+            "<code>db-….json.rev1</code>"
         ),
         "bad_file": (
             "🚫 <b>This does not look like a Soika backup</b>\n"
             "<i>Nothing to restore — the database is untouched.</i>"
-        ),
-        "foreign": (
-            "🚫 <b>This backup belongs to another account</b>\n"
-            "<i>It carries a foreign inline bot and channels.</i>"
         ),
         "title": "🗄 <b>Database backup</b>",
         "title_first_run": (
@@ -447,8 +470,95 @@ class BackupMod(loader.Module):
     @loader.owner
     @loader.command(alias="bkp")
     async def backupcmd(self, message):
-        """— сделать бэкап прямо сейчас"""
-        await utils.answer_file(message, *self._payload())
+        """— прислать копию базы в «Избранное»"""
+        payload, caption = self._payload()
+
+        # В файле лежит токен бота и список доверенных, поэтому копия уходит
+        # в «Избранное», а не в тот чат, где набрали команду
+        await self.client.send_file("me", payload, caption=caption)
+        await utils.answer(message, self.strings["backup_sent"])
+
+    @loader.owner
+    @loader.command(alias="bkpmods")
+    async def backupmodscmd(self, message):
+        """— прислать архив с установленными модулями"""
+        installed = self.db.get("soika.loader", "installed", {}) or {}
+        files = sorted(self.allmodules.external_dir.glob("*.py"))
+
+        if not files and not installed:
+            await utils.answer(message, self.strings["no_mods"])
+            return
+
+        archive = io.BytesIO()
+
+        with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
+            for path in files:
+                bundle.writestr(path.name, path.read_bytes())
+
+            bundle.writestr(MODS_MAP, json.dumps(installed, ensure_ascii=False, indent=2))
+
+        archive.seek(0)
+        archive.name = f"soika-mods-{time.strftime('%Y%m%d-%H%M')}.zip"
+
+        await utils.answer_file(
+            message,
+            archive,
+            caption=self.strings["mods_caption"].format(
+                len(files),
+                self.client.dispatcher.prefixes[0],
+            ),
+        )
+
+    @loader.owner
+    @loader.command(alias="rstmods")
+    async def restoremodscmd(self, message):
+        """— восстановить модули из архива (ответом на файл)"""
+        reply = await message.get_reply_message()
+
+        if not reply or not reply.document:
+            await utils.answer(message, self.strings["no_file"])
+            return
+
+        payload = await reply.download_media(bytes)
+        restored = self._unpack_mods(payload)
+
+        if restored is None:
+            await utils.answer(message, self.strings["bad_mods"])
+            return
+
+        sent = await utils.answer(message, self.strings["mods_restored"].format(restored))
+        await self._restart_after(sent)
+
+    def _unpack_mods(self, payload: bytes) -> int | None:
+        """Разложить архив по каталогу модулей. ``None`` — архив не наш."""
+        try:
+            with zipfile.ZipFile(io.BytesIO(payload)) as bundle:
+                names = bundle.namelist()
+
+                if MODS_MAP in names:
+                    installed = json.loads(bundle.read(MODS_MAP).decode())
+
+                    if isinstance(installed, dict) and all(
+                        isinstance(name, str) and utils.check_url(url)
+                        for name, url in installed.items()
+                    ):
+                        self.db.set("soika.loader", "installed", installed)
+
+                target = self.allmodules.external_dir
+                restored = 0
+
+                for name in names:
+                    if name == MODS_MAP or not name.endswith(".py"):
+                        continue
+
+                    # Path(name).name — чтобы архив не разложил файлы куда попало
+                    (target / Path(name).name).write_bytes(bundle.read(name))
+                    restored += 1
+        except (zipfile.BadZipFile, json.JSONDecodeError, OSError, UnicodeDecodeError):
+            logger.exception("Архив с модулями не разобрался")
+            return None
+
+        return restored
 
     @loader.owner
     @loader.command()
@@ -520,10 +630,18 @@ class BackupMod(loader.Module):
             await utils.answer(message, self.strings["bad_file"])
             return
 
-        if reason := self._reject_reason(data):
-            await utils.answer(message, self.strings[reason])
+        data = self._autofix(data)
+
+        if data is None:
+            await utils.answer(message, self.strings["bad_file"])
             return
 
+        # Токен инлайн-бота из копии не берём: у этого аккаунта он свой, а чужой
+        # всё равно не заработает. Так же поступает Hikka
+        with contextlib.suppress(KeyError):
+            data[INLINE_OWNER].pop("bot_token")
+
+        # Подпись версий 1.5.1 в базе не нужна
         data.pop(MARKER, None)
 
         # Прежнюю базу откладываем в ревизию: восстановление перезаписывает всё,
@@ -534,30 +652,41 @@ class BackupMod(loader.Module):
         self.db.update(data)
         await self.db.flush()
 
-        prefix = self.client.dispatcher.prefixes[0]
-        await utils.answer(message, self.strings["restored"].format(len(data), prefix))
+        sent = await utils.answer(message, self.strings["restored"].format(len(data)))
+        await self._restart_after(sent)
 
-    def _reject_reason(self, data: typing.Any) -> str | None:
-        """Почему файл нельзя восстанавливать. ``None`` — можно.
+    @staticmethod
+    def _autofix(data: typing.Any) -> dict | None:
+        """Почистить содержимое копии перед восстановлением.
 
-        База выглядит как ``{раздел: {ключ: значение}}``. Раньше проверка была
-        одна — «это словарь», поэтому любой посторонний JSON стирал базу дочиста.
+        База выглядит как ``{раздел: {ключ: значение}}``. Всё, что на неё не
+        похоже, выбрасываем с записью в лог, а не роняем восстановление — так
+        сделано в Hikka (``process_db_autofix``). Если после чистки ничего не
+        осталось, это был не бэкап, и трогать базу нельзя.
         """
-        if not isinstance(data, dict) or not data:
-            return "bad_file"
+        if not isinstance(data, dict):
+            return None
 
-        if not all(isinstance(value, dict) for value in data.values()):
-            return "bad_file"
+        clean: dict = {}
 
-        owner = data.get(MARKER, {}).get("owner")
+        for owner, section in data.items():
+            if not isinstance(owner, str) or not isinstance(section, dict):
+                logger.warning("Бэкап: выброшен раздел %r — не похож на раздел базы", owner)
+                continue
 
-        if owner is not None and owner != self.client.tg_id:
-            return "foreign"
+            clean[owner] = {key: value for key, value in section.items() if isinstance(key, str)}
 
-        known = {"soika.settings", "soika.inline", "soika.core", "soika.loader", MARKER}
-        known.update(type(module).__name__ for module in self.allmodules.modules)
+        return clean or None
 
-        return None if known & set(data) else "bad_file"
+    async def _restart_after(self, message) -> None:
+        """Перезапуститься, чтобы модули подхватили новую базу — как у Hikka."""
+        if isinstance(message, list):
+            message = message[0]
+
+        try:
+            await self.invoke("restart", message=message)
+        except Exception:
+            logger.exception("Не получилось перезапуститься после восстановления")
 
     # ------------------------------------------------------------------ #
     #  Расписание
@@ -594,19 +723,14 @@ class BackupMod(loader.Module):
     #  Отправка
     # ------------------------------------------------------------------ #
     def _payload(self) -> tuple:
-        data = dict(self.db)
-
-        # Подписываем копию: чья она и чем снята — чтобы чужую не поставили сюда
-        data[MARKER] = {
-            "owner": self.client.tg_id,
-            "version": __version_str__,
-            "created": int(time.time()),
-        }
-
-        dump = json.dumps(data, ensure_ascii=False, indent=2)
+        dump = json.dumps(dict(self.db), ensure_ascii=False, indent=2)
         payload = io.BytesIO(dump.encode())
         payload.name = f"soika-db-{self.client.tg_id}-{time.strftime('%Y%m%d-%H%M')}.json"
-        caption = self.strings["caption"].format(len(self.db), time.strftime("%d.%m.%Y %H:%M"))
+        caption = self.strings["caption"].format(
+            len(self.db),
+            time.strftime("%d.%m.%Y %H:%M"),
+            self.client.dispatcher.prefixes[0],
+        )
         return payload, caption
 
     async def _ensure_channel(self):
