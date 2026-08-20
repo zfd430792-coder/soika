@@ -16,7 +16,7 @@
   "restart_finished": "🪶 <b>Soika restarted in {} sec.</b>",
   "unknown_error": "🚫 <b>Something went wrong</b>",
   "bot_welcome_new": "🪶 <b>Hi. Your userbot Soika is installed.</b>",
-  "bot_welcome_restart": "🪶 <b>Soika restarted and is back online.</b>",
+  "bot_back": "🪶 <b>Soika {version} is back online.</b>",
   "bot_guide": "📖 <b>Quick guide:</b>\n<b>1.</b> <code>{prefix}help</code> — list of modules\n<b>2.</b> <code>{prefix}help name</code> — what a module does\n<b>3.</b> <code>{prefix}dlmod link</code> — install a module from a link\n<b>4.</b> <code>{prefix}loadmod</code> replying to a .py file — install your own\n<b>5.</b> <code>{prefix}unloadmod name</code> — unload a module",
   "bot_modules": "🧩 <b>Modules</b> — official catalog: {repo}\nInstall with <code>{prefix}ml name</code>; the same place holds the guide on writing your own.\n⚠️ Be careful with third-party modules: a module runs as your account and sees everything the userbot reaches. Install only what you trust.",
   "bot_compat": "💡 Modules for <b>Hikka</b>, FTG, GeekTG and Dragon work as is.",

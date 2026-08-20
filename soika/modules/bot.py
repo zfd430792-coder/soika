@@ -11,6 +11,8 @@ import tempfile
 from .. import loader, utils
 from ..inline.core import LANG_CALLBACK, MENU_CALLBACK, SETTINGS_CALLBACK
 
+SETTINGS = "soika.settings"
+
 logger = logging.getLogger(__name__)
 
 BOTFATHER = "@BotFather"
@@ -86,6 +88,22 @@ class BotMod(loader.Module):
         "web_off": "🚫 <b>Web panel is not running</b>\n<i>Start Soika with</i> <code>--web</code>",
         "web_url": "🌐 <b>Web panel:</b> {}\n<i>The link is single-use, do not share it.</i>",
     }
+
+    config = loader.ModuleConfig(
+        loader.ConfigValue(
+            "announce_restart",
+            True,
+            "Отмечаться в личке, когда бот поднялся после внезапного перезапуска",
+            validator=loader.validators.Boolean(),
+        ),
+    )
+
+    async def client_ready(self, client, db):
+        await self.config_complete()
+
+    async def config_complete(self):
+        # Ядро читает настройку до загрузки модулей, поэтому дублируем её в общий раздел
+        self.db.set(SETTINGS, "announce_restart", bool(self.config["announce_restart"]))
 
     @property
     def prefix(self) -> str:

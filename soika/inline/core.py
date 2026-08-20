@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 import typing
 
 from aiogram import BaseMiddleware, Bot, Dispatcher
@@ -32,6 +33,10 @@ from .units import NAV_CLOSE, NAV_NEXT, NAV_NOOP, NAV_PREV, UnitsMixin
 logger = logging.getLogger(__name__)
 
 CLEANUP_INTERVAL = 120
+
+#: Раздел настроек и окно, внутри которого анонс считается дублем приветствия
+SETTINGS = "soika.settings"
+GREETING_WINDOW = 120
 AVATAR = configuration.repo_root() / "assets" / "bot_pfp.png"
 
 #: Разделы меню бота. Обработчики живут в модулях, ядро только рисует кнопки
@@ -151,7 +156,10 @@ class InlineManager(UnitsMixin):
 
         logger.info("Инлайн-бот @%s на связи", self.bot_username)
         utils.spawn(self.greet_owner())
-        utils.spawn(self.announce_restart())
+
+        # Флаг читаем сейчас: через несколько секунд ядро его уже подчистит
+        by_command = bool(self._db.get("soika.core", "restart_info"))
+        utils.spawn(self.announce_restart(by_command=by_command))
         return True
 
     async def greet_owner(self, *, force: bool = False) -> bool:
@@ -171,6 +179,7 @@ class InlineManager(UnitsMixin):
 
             sent = await self._client.send_message(self.bot_username, "/start")
             self._db.set("soika.inline", "greeted", True)
+            self._db.set("soika.inline", "greeted_at", time.time())
 
             # Команду убираем — в диалоге остаётся только ответ бота
             await asyncio.sleep(2)
@@ -389,18 +398,34 @@ class InlineManager(UnitsMixin):
     async def _on_start(self, message: BotMessage) -> None:
         await self.send_welcome(message.chat.id)
 
-    async def announce_restart(self) -> None:
-        """Приветствие при каждом запуске — сразу видно, что бот поднялся."""
+    async def announce_restart(self, *, by_command: bool = False) -> None:
+        """Короткая отметка, что бот поднялся — если её вообще стоит слать.
+
+        Раньше здесь уходило полное приветствие с баннером и гайдом, то есть
+        два сообщения после каждого перезапуска. При обновлении к ним
+        добавлялся отчёт — три сообщения подряд на пустом месте.
+        """
+        # Перезапуск по команде виден и так: сообщение в чате правится само
+        if by_command or not self._db.get(SETTINGS, "announce_restart", True):
+            return
+
         await asyncio.sleep(6)
 
-        # На самом первом запуске приветствие придёт в ответ на /start
+        # Первый запуск: приветствие уже ушло в ответ на /start
         if not self._db.get("soika.inline", "greeted"):
             return
 
-        with contextlib.suppress(Exception):
-            await self.send_welcome(self._client.tg_id, restarted=True)
+        if time.time() - self._db.get("soika.inline", "greeted_at", 0) < GREETING_WINDOW:
+            return
 
-    async def send_welcome(self, chat_id: int, *, restarted: bool = False) -> None:
+        with contextlib.suppress(Exception):
+            await self.send_pm_unit(
+                self._client.tg_id,
+                self._t("bot_back", version=__version_str__),
+                self.menu_markup(),
+            )
+
+    async def send_welcome(self, chat_id: int) -> None:
         """Баннер отдельным сообщением, следом — приветствие с кнопками.
 
         Раздельно, потому что подпись к картинке в Telegram ограничена
@@ -411,7 +436,7 @@ class InlineManager(UnitsMixin):
 
         await self.send_pm_unit(
             chat_id,
-            self.welcome_text(restarted=restarted),
+            self.welcome_text(),
             self.welcome_markup(),
         )
 
@@ -425,8 +450,8 @@ class InlineManager(UnitsMixin):
     def prefix(self) -> str:
         return self._db.get("soika.settings", "prefixes", ["."])[0]
 
-    def welcome_text(self, *, restarted: bool = False) -> str:
-        header = self._t("bot_welcome_restart" if restarted else "bot_welcome_new")
+    def welcome_text(self) -> str:
+        header = self._t("bot_welcome_new")
         catalog = f'<a href="{MODULES_REPO}">{MODULES_REPO.rsplit("/", 1)[-1]}</a>'
 
         return "\n\n".join(
