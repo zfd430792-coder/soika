@@ -25,7 +25,11 @@ GROUP_MEMBER = 1 << 5
 PM = 1 << 6
 EVERYONE = 1 << 7
 
-DEFAULT_PERMISSIONS = OWNER | SUDO
+#: По умолчанию команду выполняет только владелец и те, кого он добавил в owner.
+#: Так же устроена Hikka: sudo и support там объявлены устаревшими, потому что
+#: «неполный доступ» через них всё равно позволял ставить модули, то есть
+#: выполнять любой код от имени аккаунта
+DEFAULT_PERMISSIONS = OWNER
 BITS = {
     "owner": OWNER,
     "sudo": SUDO,

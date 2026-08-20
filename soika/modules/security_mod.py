@@ -111,19 +111,22 @@ class SecurityMod(loader.Module):
     def manager(self):
         return self.client.dispatcher.security
 
+    @loader.owner
     @loader.command()
     async def sudocmd(self, message):
-        """[реплай|id] — выдать или забрать полный доступ"""
+        """[реплай|id] — список sudo; сам по себе доступа не даёт"""
         await self._toggle(message, "sudo")
 
+    @loader.owner
     @loader.command()
     async def supportcmd(self, message):
-        """[реплай|id] — выдать или забрать ограниченный доступ"""
+        """[реплай|id] — список support; сам по себе доступа не даёт"""
         await self._toggle(message, "support")
 
+    @loader.owner
     @loader.command()
     async def ownercmd(self, message):
-        """[реплай|id] — список совладельцев юзербота"""
+        """[реплай|id] — выдать полный доступ к юзерботу"""
         await self._toggle(message, "owner")
 
     async def _toggle(self, message, kind: str) -> None:
