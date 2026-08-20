@@ -24,7 +24,7 @@ from aiogram.types import Message as BotMessage
 from telethon.tl.functions.contacts import UnblockRequest
 
 from .. import configuration, utils
-from ..version import BRAND, BRAND_EMOJI, DEFAULT_REPO, __version_str__
+from ..version import BRAND, BRAND_EMOJI, DEFAULT_REPO, MODULES_REPO, __version_str__
 from . import token as token_tools
 from .types import BotCreationError, InlineCall, InlineUnit, normalize_buttons
 from .units import NAV_CLOSE, NAV_NEXT, NAV_NOOP, NAV_PREV, UnitsMixin
@@ -427,11 +427,13 @@ class InlineManager(UnitsMixin):
 
     def welcome_text(self, *, restarted: bool = False) -> str:
         header = self._t("bot_welcome_restart" if restarted else "bot_welcome_new")
+        catalog = f'<a href="{MODULES_REPO}">{MODULES_REPO.rsplit("/", 1)[-1]}</a>'
 
         return "\n\n".join(
             (
                 header,
                 self._t("bot_guide", prefix=self.prefix),
+                self._t("bot_modules", prefix=self.prefix, repo=catalog),
                 self._t("bot_compat") + "\n" + self._t("bot_backup_hint", prefix=self.prefix),
             )
         )
@@ -450,7 +452,10 @@ class InlineManager(UnitsMixin):
         return [
             [{"text": self._t("btn_backup"), "data": BACKUP_CALLBACK}],
             [{"text": self._t("btn_settings"), "data": SETTINGS_CALLBACK}],
-            [{"text": self._t("btn_sources"), "url": DEFAULT_REPO}],
+            [
+                {"text": self._t("btn_modules"), "url": MODULES_REPO},
+                {"text": self._t("btn_sources"), "url": DEFAULT_REPO},
+            ],
         ]
 
     def welcome_markup(self) -> list[list[dict]]:

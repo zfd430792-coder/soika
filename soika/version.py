@@ -1,6 +1,6 @@
 """Версия и брендинг Сойки."""
 
-__version__ = (1, 7, 0)
+__version__ = (1, 8, 0)
 __version_str__ = ".".join(map(str, __version__))
 
 BRAND = "Сойка"
@@ -13,5 +13,8 @@ BOT_PREFIX = "soika"
 #: Репозиторий по умолчанию — из него тянутся обновления (.update)
 DEFAULT_REPO = "https://github.com/zfd430792-coder/soika"
 
-#: Каталог модулей для команды .ml — отдельный репозиторий
+#: Официальный каталог модулей — страница репозитория для ссылок
+MODULES_REPO = "https://github.com/zfd430792-coder/Soika-modu"
+
+#: Тот же каталог, но raw — отсюда качает команда .ml
 DEFAULT_MODULES_REPO = "https://raw.githubusercontent.com/zfd430792-coder/Soika-modu/main"
