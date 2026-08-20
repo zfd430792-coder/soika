@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import time
+import typing
 
 from .. import configuration, loader, utils
 from ..version import DEFAULT_REPO, __version_str__
@@ -57,7 +58,7 @@ class UpdaterMod(loader.Module):
             "{changelog}"
         ),
         "auto_updating": "🤖 <b>Нашлось обновление — обновляюсь сам</b>\n\n{versions}\n\n{changelog}",
-        "updated": "✅ <b>Сойка обновлена</b>\n\n{versions}\n\n{changelog}",
+        "updated": "✅ <b>Сойка обновлена</b>\n{versions}",
         "versions_new": "🕸 <b>Версия:</b> <code>{}</code> → <code>{}</code>",
         "versions_same": "🕸 <b>Версия:</b> <code>{}</code> <i>(номер не менялся)</i>",
         "changelog": "📝 <b>Что изменилось:</b>\n{}",
@@ -88,7 +89,7 @@ class UpdaterMod(loader.Module):
             "{changelog}"
         ),
         "auto_updating": "🤖 <b>Found an update, updating myself</b>\n\n{versions}\n\n{changelog}",
-        "updated": "✅ <b>Soika updated</b>\n\n{versions}\n\n{changelog}",
+        "updated": "✅ <b>Soika updated</b>\n{versions}",
         "versions_new": "🕸 <b>Version:</b> <code>{}</code> → <code>{}</code>",
         "versions_same": "🕸 <b>Version:</b> <code>{}</code> <i>(number unchanged)</i>",
         "changelog": "📝 <b>What changed:</b>\n{}",
@@ -247,12 +248,13 @@ class UpdaterMod(loader.Module):
 
         if self.config["auto_update"]:
             logger.info("Найдено обновление %s — обновляюсь сам", commits[0].hexsha[:8])
-            await self._notify(
+            sent = await self._notify(
                 self.strings["auto_updating"].format(
                     versions=await self._versions(repo),
                     changelog=self._changelog(commits),
                 )
             )
+            self._remember(sent)
             await self._update(None, repo=repo, commits=commits)
             return
 
@@ -301,20 +303,42 @@ class UpdaterMod(loader.Module):
 
         await self.client.send_message("me", text + self._hint())
 
-    async def _notify(self, text: str, buttons=None) -> bool:
+    async def _notify(self, text: str, buttons=None) -> typing.Any:
         """Написать в личку собственного бота. False — если бот недоступен."""
         if not self._bot_alive():
             return False
 
-        return bool(
-            await self.inline.send_pm_unit(
-                self.client.tg_id,
-                text,
-                buttons,
-                photo=self.config["banner_url"] or None,
-                ttl=NOTIFY_TTL,
-            )
+        return await self.inline.send_pm_unit(
+            self.client.tg_id,
+            text,
+            buttons,
+            photo=self.config["banner_url"] or None,
+            ttl=NOTIFY_TTL,
         )
+
+    def _remember(self, sent: typing.Any) -> None:
+        """Запомнить сообщение, которое после перезапуска станет отчётом."""
+        unit = getattr(sent, "form", None)
+
+        if unit is not None and unit.bot_chat and unit.bot_message:
+            self.set("update_message", [unit.bot_chat, unit.bot_message])
+
+    async def _edit_bot_message(self, chat: int, message_id: int, text: str, markup) -> bool:
+        """Переписать сообщение бота: сначала как подпись, потом как текст."""
+        for method in ("edit_message_caption", "edit_message_text"):
+            payload = {"caption" if "caption" in method else "text": text}
+
+            with contextlib.suppress(Exception):
+                await getattr(self.inline.bot, method)(
+                    chat_id=chat,
+                    message_id=message_id,
+                    parse_mode="HTML",
+                    reply_markup=markup,
+                    **payload,
+                )
+                return True
+
+        return False
 
     async def _report_update(self) -> None:
         """После перезапуска рассказать, что именно обновилось."""
@@ -328,24 +352,48 @@ class UpdaterMod(loader.Module):
 
             await asyncio.sleep(2)
 
-        changelog = self._changelog_from(
-            report.get("changelog") or [],
-            report.get("extra", 0),
-        )
         text = self.strings["updated"].format(
             versions=self._versions_text(
                 report.get("from_version", ""),
                 report.get("to_version", ""),
             ),
-            changelog=changelog,
         )
 
-        if not await self._notify(text):
+        # Список изменений уже был в уведомлении — вместо второй копии
+        # переписываем то самое сообщение и оставляем ссылку на коммиты
+        markup = None
+        buttons = []
+
+        if link := self._commits_link(self._repo()):
+            buttons = [[{"text": self.strings["btn_commits"], "url": link}]]
+
+            with contextlib.suppress(Exception):
+                from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+                markup = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text=self.strings["btn_commits"], url=link)]
+                    ]
+                )
+
+        target = self.get("update_message")
+        self.set("update_message", None)
+
+        if target and self._bot_alive():
+            chat, message_id = target
+
+            if await self._edit_bot_message(chat, message_id, text, markup):
+                return
+
+        if not await self._notify(text, buttons):
             with contextlib.suppress(Exception):
                 await self.client.send_message("me", text)
 
     async def _cb_update(self, call) -> None:
         await call.answer(self.strings["updating"])
+
+        # Это же сообщение после перезапуска станет отчётом — новых не будет
+        self._remember(call)
 
         with contextlib.suppress(Exception):
             await call.edit(self.strings["updating"], reply_markup=[])
