@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/Telethon-1.44-4c8bf5?style=flat-square" alt="Telethon 1.44">
   <img src="https://img.shields.io/badge/aiogram-3.30-4c8bf5?style=flat-square" alt="aiogram 3.30">
   <img src="https://img.shields.io/badge/модулей-14-4c8bf5?style=flat-square" alt="14 модулей">
-  <img src="https://img.shields.io/badge/команд-49-4c8bf5?style=flat-square" alt="49 команд">
+  <img src="https://img.shields.io/badge/команд-63-4c8bf5?style=flat-square" alt="63 команды">
   <img src="https://img.shields.io/badge/лицензия-MIT-3ba55d?style=flat-square" alt="MIT">
 </p>
 
@@ -94,7 +94,7 @@ venv/bin/python -m soika
 
 ## Возможности
 
-- 🧩 **14 модулей и 49 команд встроено** — после входа всё уже работает
+- 🧩 **14 модулей и 63 команды встроено** — после входа всё уже работает
 - 🔁 **Модули от Hikka, FTG, GeekTG и Dragon** ставятся без правок
 - 🤖 **Свой инлайн-бот** заводится сам — кнопки, галереи, вывод ошибок
 - ⚙️ **Настройки кнопками** — `.cfg` вместо правки файлов
@@ -125,19 +125,24 @@ venv/bin/python -m soika
 Префикс по умолчанию — точка, меняется командой `.prefix !`.
 
 <details>
-<summary><b>Все 49 команд</b></summary>
+<summary><b>Все 63 команды</b></summary>
 
 | Команда | Описание |
 |---|---|
-| `.help [модуль]` | список модулей или справка по одному |
+| `.help [модуль]`, `.helphide` | справка и скрытие модуля из списка |
 | `.info`, `.ping` | карточка юзербота, задержка до Telegram |
 | `.dlmod <ссылка>` | установить модуль по ссылке |
 | `.loadmod` | установить модуль из .py файла (ответом на файл) |
 | `.ml <имя>` | установить модуль из каталога |
+| `.repos`, `.addrepo`, `.delrepo` | откуда `.ml` берёт модули |
+| `.clearmodules` | выгрузить и удалить все свои модули |
 | `.unloadmod <имя>` | выгрузить модуль |
 | `.modules` | что установлено и откуда |
 | `.cfg`, `.setcfg` | настройки модулей кнопками и текстом |
 | `.prefix`, `.addalias`, `.delalias`, `.aliases`, `.lang` | префикс, алиасы, язык |
+| `.blacklist`, `.blacklistuser`, `.blacklists` | где и кого Сойка не слушает |
+| `.watchers`, `.watcherbl` | какие модули следят за сообщениями |
+| `.suspend <секунды>` | замолчать на время |
 | `.e <код>` | выполнить Python-код прямо из чата |
 | `.shell <команда>`, `.killshell` | команды системы с живым выводом |
 | `.sudo`, `.owner`, `.support` | доверенные: полный доступ и совладельцы |
@@ -145,10 +150,11 @@ venv/bin/python -m soika
 | `.security <команда>` | кому вообще доступна команда |
 | `.id` | ID чата, сообщения и пользователя |
 | `.note`, `.notes`, `.delnote`, `.clearnotes` | короткие заметки в базе |
-| `.botmenu` | открыть меню бота в его личке |
+| `.botmenu`, `.weburl` | меню бота и адрес веб-панели |
 | `.botinfo`, `.startbot`, `.setbotpic`, `.revokebot` | карточка бота, аватарка, токен |
-| `.logs [уровень]`, `.logchannel`, `.clearlogs` | логи файлом и канал с логами |
+| `.logs [уровень]`, `.logchannel`, `.clearlogs`, `.dump` | логи, канал с логами, объект сообщения |
 | `.backup`, `.backups`, `.autobackup`, `.restoredb` | бэкапы базы и расписание |
+| `.cleardb` | стереть базу целиком |
 | `.backupmods`, `.restoremods` | архив с установленными модулями |
 | `.update`, `.restart`, `.updatecheck`, `.autoupdate`, `.version` | обновление и перезапуск |
 
@@ -168,7 +174,7 @@ venv/bin/python -m soika
 🌟 Владелец: Имя ← ссылка на профиль
 ✍️ Префикс: «.»
 ⏰ Аптайм: 3 д. 07:22:06
-🧩 Модулей: 14 · команд: 49
+🧩 Модулей: 14 · команд: 63
 
 🔄 Нагрузка CPU: 0.4 %
 👾 Нагрузка RAM: 118.6 МБ
@@ -258,6 +264,10 @@ venv/bin/python -m soika
 
 `.rules` покажет выданные точечные разрешения, `.deny` заберёт их, а повторный
 `.sudo` или `.owner` на том же человеке уберёт его из списка.
+
+Где Сойка **не** должна работать: `.blacklist` в чате — и она молчит там
+совсем, `.blacklistuser` ответом на человека — не слушает его команды,
+`.suspend 300` — замолкает везде на пять минут.
 
 > ⚠️ `.sudo` — это доверие целиком: такой человек может ставить модули, а значит
 > выполнять произвольный код от имени твоего аккаунта. `.owner` вдобавок открывает

@@ -27,6 +27,14 @@ class LoaderMod(loader.Module):
         "modules": "🪶 <b>Установлено модулей: {}</b>\n\n{}",
         "no_commands": "<i>без команд</i>",
         "repo_missing": "🔎 <b>В репозитории нет модуля</b> <code>{}</code>",
+        "repo_added": "✅ <b>Репозиторий добавлен:</b> {}",
+        "repo_removed": "✅ <b>Репозиторий убран:</b> {}",
+        "repo_unknown": "🔎 <b>Такого репозитория в списке нет</b>",
+        "repo_bad": "🚫 <b>Дай ссылку на репозиторий с модулями</b>",
+        "repos": "🪶 <b>Репозитории модулей</b>\n\n{}",
+        "repo_main": "⭐️",
+        "cleared": "🧹 <b>Удалено модулей: {}</b>",
+        "nothing_to_clear": "🧹 <b>Своих модулей и так нет</b>",
     }
 
     strings_en = {
@@ -42,6 +50,14 @@ class LoaderMod(loader.Module):
         "modules": "🪶 <b>Modules installed: {}</b>\n\n{}",
         "no_commands": "<i>no commands</i>",
         "repo_missing": "🔎 <b>Repository has no module</b> <code>{}</code>",
+        "repo_added": "✅ <b>Repository added:</b> {}",
+        "repo_removed": "✅ <b>Repository removed:</b> {}",
+        "repo_unknown": "🔎 <b>No such repository in the list</b>",
+        "repo_bad": "🚫 <b>Give a link to a modules repository</b>",
+        "repos": "🪶 <b>Module repositories</b>\n\n{}",
+        "repo_main": "⭐️",
+        "cleared": "🧹 <b>Removed modules: {}</b>",
+        "nothing_to_clear": "🧹 <b>No user modules installed</b>",
     }
 
     @loader.command(alias="lm")
@@ -85,17 +101,84 @@ class LoaderMod(loader.Module):
             await utils.answer(message, self.strings["repo_missing"].format("?"))
             return
 
-        repo = self.config["repo"].rstrip("/")
-        url = f"{repo}/{name}.py"
-
         message = await utils.answer(message, self.strings["downloading"])
-        source = await self._download(url)
 
-        if source is None:
-            await utils.answer(message, self.strings["repo_missing"].format(name))
+        # Ищем по всем подключённым репозиториям, начиная с основного
+        for repo in self._repos():
+            url = f"{repo}/{name}.py"
+
+            if (source := await self._download(url)) is not None:
+                await self._install(message, source, origin=url)
+                return
+
+        await utils.answer(message, self.strings["repo_missing"].format(name))
+
+    @loader.owner
+    @loader.command()
+    async def addrepocmd(self, message):
+        """<ссылка> — добавить репозиторий модулей для .ml"""
+        url = utils.get_args_raw(message).strip().rstrip("/")
+
+        if not utils.check_url(url):
+            await utils.answer(message, self.strings["repo_bad"])
             return
 
-        await self._install(message, source, origin=url)
+        extra = self.db.pointer("soika.loader", "repos", [], item_type=list)
+
+        if url not in extra and url != self.config["repo"].rstrip("/"):
+            extra.append(url)
+
+        await utils.answer(message, self.strings["repo_added"].format(utils.escape_html(url)))
+
+    @loader.owner
+    @loader.command()
+    async def delrepocmd(self, message):
+        """<ссылка> — убрать репозиторий модулей"""
+        url = utils.get_args_raw(message).strip().rstrip("/")
+        extra = self.db.pointer("soika.loader", "repos", [], item_type=list)
+
+        if url not in extra:
+            await utils.answer(message, self.strings["repo_unknown"])
+            return
+
+        extra.remove(url)
+        await utils.answer(message, self.strings["repo_removed"].format(utils.escape_html(url)))
+
+    @loader.command()
+    async def reposcmd(self, message):
+        """— откуда .ml берёт модули"""
+        main = self.config["repo"].rstrip("/")
+        lines = [
+            f"{self.strings['repo_main'] if repo == main else '▫️'} "
+            f"<code>{utils.escape_html(repo)}</code>"
+            for repo in self._repos()
+        ]
+
+        await utils.answer(message, self.strings["repos"].format("\n".join(lines)))
+
+    @loader.owner
+    @loader.command()
+    async def clearmodulescmd(self, message):
+        """— выгрузить и удалить все свои модули"""
+        external = [
+            module for module in list(self.allmodules.modules) if not self._is_builtin(module)
+        ]
+
+        if not external:
+            await utils.answer(message, self.strings["nothing_to_clear"])
+            return
+
+        for module in external:
+            await self.allmodules.unload_module(type(module).__name__)
+
+        await utils.answer(message, self.strings["cleared"].format(len(external)))
+
+    def _repos(self) -> list[str]:
+        """Основной репозиторий из конфига плюс добавленные вручную."""
+        main = self.config["repo"].rstrip("/")
+        extra = self.db.get("soika.loader", "repos", []) or []
+
+        return [main, *(repo for repo in extra if repo != main)]
 
     @loader.command(alias="ulm")
     async def unloadmodcmd(self, message):

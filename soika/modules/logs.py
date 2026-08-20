@@ -30,18 +30,18 @@ class LogsMod(loader.Module):
         "empty": "🪶 <b>Логов уровня</b> <code>{}</code> <b>нет — и хорошо</b>",
         "caption": "🪶 <b>Логи Сойки</b> · уровень <code>{}</code> · строк: {}",
         "cleared": "🧹 <b>Логи в памяти очищены</b>",
+        "dump": "🔬 <b>Объект сообщения</b>\n<pre><code>{}</code></pre>",
         "unknown_level": "🚫 <b>Уровни:</b> <code>{}</code>",
         "channel_on": (
-            "📜 <b>Лог-канал:</b> <a href=\"{}\">soika-logs</a>\n"
+            '📜 <b>Лог-канал:</b> <a href="{}">soika-logs</a>\n'
             "<b>Уровень:</b> <code>{}</code> · <b>отправка раз в</b> {} с\n\n"
             "<i>Канал в архиве и заглушён. Выключить:</i> <code>{}logchannel off</code>"
         ),
         "channel_off": (
-            "📜 <b>Лог-канал выключен</b>\n\n"
-            "<i>Включить:</i> <code>{}logchannel on</code>"
+            "📜 <b>Лог-канал выключен</b>\n\n<i>Включить:</i> <code>{}logchannel on</code>"
         ),
         "channel_failed": "🚫 <b>Не получилось создать лог-канал — проверь лимит каналов</b>",
-        "channel_enabled": "✅ <b>Лог-канал включён:</b> <a href=\"{}\">soika-logs</a>",
+        "channel_enabled": '✅ <b>Лог-канал включён:</b> <a href="{}">soika-logs</a>',
         "channel_disabled": "✅ <b>Лог-канал выключен</b>",
     }
 
@@ -51,13 +51,13 @@ class LogsMod(loader.Module):
         "cleared": "🧹 <b>In-memory logs cleared</b>",
         "unknown_level": "🚫 <b>Levels:</b> <code>{}</code>",
         "channel_on": (
-            "📜 <b>Log channel:</b> <a href=\"{}\">soika-logs</a>\n"
+            '📜 <b>Log channel:</b> <a href="{}">soika-logs</a>\n'
             "<b>Level:</b> <code>{}</code> · <b>flush every</b> {} s\n\n"
             "<i>Disable:</i> <code>{}logchannel off</code>"
         ),
         "channel_off": "📜 <b>Log channel is off</b>\n\n<i>Enable:</i> <code>{}logchannel on</code>",
         "channel_failed": "🚫 <b>Could not create the log channel — check the channel limit</b>",
-        "channel_enabled": "✅ <b>Log channel enabled:</b> <a href=\"{}\">soika-logs</a>",
+        "channel_enabled": '✅ <b>Log channel enabled:</b> <a href="{}">soika-logs</a>',
         "channel_disabled": "✅ <b>Log channel disabled</b>",
     }
 
@@ -146,6 +146,22 @@ class LogsMod(loader.Module):
     # ------------------------------------------------------------------ #
     #  Команды
     # ------------------------------------------------------------------ #
+    @loader.owner
+    @loader.command()
+    async def dumpcmd(self, message):
+        """— показать объект сообщения, на которое отвечаешь"""
+        reply = await message.get_reply_message()
+        target = reply or message
+        dump = target.stringify() if hasattr(target, "stringify") else repr(target)
+
+        if len(dump) > 3000:
+            payload = io.BytesIO(dump.encode())
+            payload.name = "dump.txt"
+            await utils.answer_file(message, payload)
+            return
+
+        await utils.answer(message, self.strings["dump"].format(utils.escape_html(dump)))
+
     @loader.owner
     @loader.command()
     async def logscmd(self, message):

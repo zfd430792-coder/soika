@@ -18,6 +18,9 @@ class HelpMod(loader.Module):
         "header": "🪶 <b>Модулей: {}</b> · <b>команд: {}</b>\n\n",
         "hint": "\n<i>Подробнее по модулю:</i> <code>{}help имя</code>",
         "developer": "\n<b>Автор:</b> {}",
+        "hidden": "🙈 <b>Модуль</b> <b>{}</b> <b>скрыт из списка</b>",
+        "shown": "👁 <b>Модуль</b> <b>{}</b> <b>снова в списке</b>",
+        "hidden_count": "\n<i>Скрыто модулей: {}</i>",
     }
 
     strings_en = {
@@ -27,6 +30,9 @@ class HelpMod(loader.Module):
         "header": "🪶 <b>Modules: {}</b> · <b>commands: {}</b>\n\n",
         "hint": "\n<i>Details:</i> <code>{}help name</code>",
         "developer": "\n<b>Developer:</b> {}",
+        "hidden": "🙈 <b>Module</b> <b>{}</b> <b>hidden from the list</b>",
+        "shown": "👁 <b>Module</b> <b>{}</b> <b>is back in the list</b>",
+        "hidden_count": "\n<i>Hidden modules: {}</i>",
     }
 
     @property
@@ -70,8 +76,36 @@ class HelpMod(loader.Module):
 
         await utils.answer_with_banner(message, text, utils.get_banner(module))
 
+    @loader.owner
+    @loader.command()
+    async def helphidecmd(self, message):
+        """<модуль> — спрятать модуль из общего списка .help"""
+        module = self.lookup(utils.get_args_raw(message).strip())
+
+        if module is None:
+            await utils.answer(
+                message,
+                self.strings["not_found"].format(utils.escape_html(utils.get_args_raw(message))),
+            )
+            return
+
+        hidden = self.db.pointer("soika.settings", "hidden_modules", [], item_type=list)
+        name = type(module).__name__
+
+        if name in hidden:
+            hidden.remove(name)
+            await utils.answer(message, self.strings["shown"].format(module.name))
+            return
+
+        hidden.append(name)
+        await utils.answer(message, self.strings["hidden"].format(module.name))
+
     async def _all_modules(self, message) -> None:
-        modules = sorted(self.allmodules.modules, key=lambda module: str(module.name).lower())
+        hidden = self.db.get("soika.settings", "hidden_modules", []) or []
+        modules = sorted(
+            (module for module in self.allmodules.modules if type(module).__name__ not in hidden),
+            key=lambda module: str(module.name).lower(),
+        )
 
         lines = []
 
@@ -81,6 +115,9 @@ class HelpMod(loader.Module):
 
         header = self.strings["header"].format(len(modules), len(self.allmodules.commands))
         footer = self.strings["hint"].format(self.prefix)
+
+        if hidden:
+            footer += self.strings["hidden_count"].format(len(hidden))
 
         pages = self._paginate(lines, header, footer)
 

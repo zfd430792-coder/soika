@@ -50,6 +50,8 @@ class BotMod(loader.Module):
         "off": "выключено",
         "back": "⬅️ Назад",
         "missing": "🚫 Модуль {} не загружен",
+        "web_off": "🚫 <b>Веб-панель не поднята</b>\n<i>Запусти Сойку с</i> <code>--web</code>",
+        "web_url": "🌐 <b>Веб-панель:</b> {}\n<i>Ссылка одноразовая, никому её не показывай.</i>",
     }
 
     strings_en = {
@@ -81,6 +83,8 @@ class BotMod(loader.Module):
         "off": "off",
         "back": "⬅️ Back",
         "missing": "🚫 Module {} is not loaded",
+        "web_off": "🚫 <b>Web panel is not running</b>\n<i>Start Soika with</i> <code>--web</code>",
+        "web_url": "🌐 <b>Web panel:</b> {}\n<i>The link is single-use, do not share it.</i>",
     }
 
     @property
@@ -189,6 +193,26 @@ class BotMod(loader.Module):
             message,
             self.strings["menu_opened"].format(self.inline.bot_username),
         )
+
+    @loader.owner
+    @loader.command()
+    async def weburlcmd(self, message):
+        """— ссылка на веб-панель, если она поднята"""
+        app = getattr(self.client, "soika", None)
+
+        if app is None:
+            await utils.answer(message, self.strings["web_off"])
+            return
+
+        # Панель обычно не поднята — поднимаем на время, как это делает Hikka
+        web = await app.open_web()
+        url = getattr(web, "url", "")
+
+        if not url:
+            await utils.answer(message, self.strings["web_off"])
+            return
+
+        await utils.answer(message, self.strings["web_url"].format(url))
 
     @loader.command(alias="inlinebot")
     async def botinfocmd(self, message):

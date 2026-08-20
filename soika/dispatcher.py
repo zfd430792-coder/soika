@@ -32,6 +32,12 @@ GREP_RE = re.compile(r"\s\|\s?grep\s+(?P<pattern>.+)$", re.IGNORECASE)
 RATE_LIMIT_WINDOW = 30
 RATE_LIMIT_COMMANDS = 20
 
+#: Ключи чёрных списков и паузы в базе
+BLACKLIST_CHATS = "blacklist_chats"
+BLACKLIST_USERS = "blacklist_users"
+DISABLED_WATCHERS = "disabled_watchers"
+SUSPENDED_UNTIL = "suspended_until"
+
 
 class CommandDispatcher:
     """Разбор префиксов, прав, фильтров и запуск обработчиков."""
@@ -62,6 +68,31 @@ class CommandDispatcher:
 
     def set_prefixes(self, prefixes: list[str]) -> None:
         self._db.set(SETTINGS, "prefixes", prefixes)
+
+    # ------------------------------------------------------------------ #
+    #  Где Сойка молчит
+    # ------------------------------------------------------------------ #
+    def suspended(self) -> float:
+        """Сколько секунд осталось до конца паузы. 0 — работаем."""
+        return max(self._db.get(SETTINGS, SUSPENDED_UNTIL, 0) - time.time(), 0)
+
+    def suspend(self, seconds: float) -> None:
+        self._db.set(SETTINGS, SUSPENDED_UNTIL, time.time() + seconds)
+
+    def muted(self, message: Message) -> bool:
+        """Чат или человек в чёрном списке — команда не выполняется."""
+        chats = self._db.get(SETTINGS, BLACKLIST_CHATS, []) or []
+        users = self._db.get(SETTINGS, BLACKLIST_USERS, []) or []
+
+        return utils.get_chat_id(message) in chats or message.sender_id in users
+
+    def watcher_disabled(self, handler: typing.Callable, message: Message) -> bool:
+        """Вотчер модуля выключен в этом чате или везде."""
+        disabled = self._db.get(SETTINGS, DISABLED_WATCHERS, {}) or {}
+        module = getattr(handler, "__self__", None)
+        where = disabled.get(type(module).__name__ if module else "", [])
+
+        return bool(where) and ("*" in where or utils.get_chat_id(message) in where)
 
     def register(self, client: typing.Any) -> None:
         """Подписаться на события клиента."""
@@ -126,6 +157,9 @@ class CommandDispatcher:
         if not isinstance(message, Message) or not message.raw_text:
             return
 
+        if self.suspended() or self.muted(message):
+            return
+
         parsed = self._parse(message)
 
         if parsed is None:
@@ -135,7 +169,9 @@ class CommandDispatcher:
 
         if not await self.security.check(message, func, command=command):
             if message.out:
-                await utils.answer(message, self._translator.gettext("no_permission").format(command))
+                await utils.answer(
+                    message, self._translator.gettext("no_permission").format(command)
+                )
 
             return
 
@@ -164,9 +200,7 @@ class CommandDispatcher:
     async def _command_failed(self, message: Message, command: str, error: Exception) -> None:
         logger.exception("Команда %s упала", command)
 
-        text = "".join(
-            traceback.format_exception(type(error), error, error.__traceback__)
-        ).strip()
+        text = "".join(traceback.format_exception(type(error), error, error.__traceback__)).strip()
         short = f"{type(error).__name__}: {error}"
 
         inline = getattr(self._client, "inline", None)
@@ -197,8 +231,14 @@ class CommandDispatcher:
         if not isinstance(message, Message):
             return
 
+        if self.suspended() or self.muted(message):
+            return
+
         for handler in list(self._modules.watchers):
             if self._should_skip(handler, message, is_watcher=True):
+                continue
+
+            if self.watcher_disabled(handler, message):
                 continue
 
             utils.spawn(self._run_watcher(handler, message))

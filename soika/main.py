@@ -118,6 +118,10 @@ class Soika:
 
         return await self._credentials_via_console()
 
+    async def open_web(self) -> typing.Any:
+        """Поднять веб-панель по требованию — этим пользуется команда .weburl."""
+        return await self._ensure_web()
+
     async def _ensure_web(self) -> typing.Any:
         if self.web is None:
             from .web import Web
@@ -163,6 +167,8 @@ class Soika:
     #  Подсистемы аккаунта
     # ------------------------------------------------------------------ #
     async def _init_client(self, client: SoikaClient) -> None:
+        client.soika = self
+
         database = Database(client)
         await database.init()
         client.db = database

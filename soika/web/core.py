@@ -134,6 +134,8 @@ class Web:
         self.soika = soika
         self.port = port
         self.token = secrets.token_urlsafe(16)
+        #: Адрес с одноразовым токеном — его отдаёт команда .weburl
+        self.url = ""
 
         self.app = web.Application()
         self.runner: web.AppRunner | None = None
@@ -166,6 +168,7 @@ class Web:
         await site.start()
 
         url = f"http://{self._host()}:{self.port}/?token={self.token}"
+        self.url = url
 
         # Через логгер, а не print: под systemd stdout буферизуется,
         # и ссылку пришлось бы ждать в journalctl неизвестно сколько

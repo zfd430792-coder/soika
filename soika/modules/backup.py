@@ -66,6 +66,13 @@ class BackupMod(loader.Module):
         "no_mods": "🚫 <b>Своих модулей нет — архивировать нечего</b>",
         "mods_restored": "✅ <b>Модулей восстановлено: {}</b>",
         "bad_mods": "🚫 <b>Это не похоже на архив с модулями Сойки</b>",
+        "cleardb_ask": (
+            "🧹 <b>Стереть базу целиком?</b>\n"
+            "<i>Уйдут настройки, доступы, установленные модули и расписания. "
+            "Инлайн-бот и вход в аккаунт останутся.</i>\n\n"
+            "<b>Точно:</b> <code>{}cleardb force</code>"
+        ),
+        "cleardb_done": "🧹 <b>База очищена. Перезапускаюсь...</b>",
         "no_file": "🚫 <b>Ответь на файл с бэкапом</b>",
         "restored": (
             "✅ <b>База восстановлена</b> — разделов: {}\n"
@@ -133,6 +140,13 @@ class BackupMod(loader.Module):
         "no_mods": "🚫 <b>No user modules to archive</b>",
         "mods_restored": "✅ <b>Modules restored: {}</b>",
         "bad_mods": "🚫 <b>This does not look like a Soika modules archive</b>",
+        "cleardb_ask": (
+            "🧹 <b>Wipe the whole database?</b>\n"
+            "<i>Settings, access lists, installed modules and schedules will go. "
+            "The inline bot and your login stay.</i>\n\n"
+            "<b>Confirm:</b> <code>{}cleardb force</code>"
+        ),
+        "cleardb_done": "🧹 <b>Database wiped. Restarting...</b>",
         "no_file": "🚫 <b>Reply to a backup file</b>",
         "restored": (
             "✅ <b>Database restored</b> — sections: {}\n"
@@ -612,6 +626,33 @@ class BackupMod(loader.Module):
             return
 
         await utils.answer(message, self.strings["usage"].format(prefix))
+
+    @loader.owner
+    @loader.command()
+    async def cleardbcmd(self, message):
+        """[force] — стереть базу целиком"""
+        prefix = self.client.dispatcher.prefixes[0]
+
+        if utils.get_args_raw(message).strip().lower() not in {"force", "точно"}:
+            await utils.answer(message, self.strings["cleardb_ask"].format(prefix))
+            return
+
+        own_bot = {
+            key: value
+            for key, value in (self.db.get(INLINE_OWNER, None, {}) or {}).items()
+            if key in INLINE_KEEP
+        }
+
+        self.db.keep_revision()
+        self.db.clear()
+
+        if own_bot:
+            self.db[INLINE_OWNER] = own_bot
+
+        await self.db.flush()
+
+        sent = await utils.answer(message, self.strings["cleardb_done"])
+        await self._restart_after(sent)
 
     @loader.owner
     @loader.command()
