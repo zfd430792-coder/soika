@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import time
 import typing
 
 from telethon.tl.types import Channel, Chat, Message, User
@@ -47,6 +48,9 @@ TITLES = {
 }
 
 DB_OWNER = "soika.security"
+
+#: Потолок прав: выше него не поднимется ни одна команда, что бы ни просил модуль
+ALL_PERMISSIONS = OWNER | SUDO | SUPPORT | GROUP_OWNER | GROUP_ADMIN | GROUP_MEMBER | PM | EVERYONE
 
 
 # --------------------------------------------------------------------------- #
@@ -112,9 +116,17 @@ class SecurityManager:
     def masks(self) -> dict[str, int]:
         return self._db.pointer(DB_OWNER, "masks", {}, item_type=dict)
 
+    @property
+    def bounding_mask(self) -> int:
+        """Глобальный потолок: что бы ни просил модуль, выше этого не дадим."""
+        return int(self._db.get(DB_OWNER, "bounding_mask", ALL_PERMISSIONS))
+
+    def set_bounding_mask(self, mask: int) -> None:
+        self._db.set(DB_OWNER, "bounding_mask", int(mask))
+
     def mask_for(self, command: str, func: typing.Callable) -> int:
-        """Права команды: сохранённая маска важнее декораторов в коде."""
-        return int(self.masks.get(command, get_flags(func)))
+        """Права команды: сохранённая маска важнее декораторов, потолок важнее всех."""
+        return int(self.masks.get(command, get_flags(func))) & self.bounding_mask
 
     def set_mask(self, command: str, mask: int) -> None:
         self.masks[command] = int(mask)
@@ -236,36 +248,58 @@ class SecurityManager:
 
     # -- точечные разрешения ---------------------------------------------- #
     @property
-    def chat_rules(self) -> dict[str, list[str]]:
-        """``{"chat:-100123": ["ping", "info"]}`` — что разрешено в конкретном чате."""
-        return self._db.pointer(DB_OWNER, "rules", {}, item_type=dict)
+    def chat_rules(self) -> dict[str, dict[str, float]]:
+        """``{"user:123": {"ping": 0}}`` — кому что разрешено и до какого времени.
+
+        ``0`` — бессрочно, иначе метка времени, после которой правило протухает.
+        """
+        rules = self._db.pointer(DB_OWNER, "rules", {}, item_type=dict)
+
+        # Старый формат — список команд без срока
+        for key, value in list(rules.items()):
+            if isinstance(value, list):
+                rules[key] = dict.fromkeys(value, 0)
+
+        return rules
+
+    def rules_for(self, target: str) -> dict[str, float]:
+        """Живые правила цели: протухшие выбрасываем на месте."""
+        rules = self.chat_rules
+        allowed = rules.get(target) or {}
+        now = time.time()
+        fresh = {command: until for command, until in allowed.items() if not until or until > now}
+
+        if fresh != allowed:
+            if fresh:
+                rules[target] = fresh
+            else:
+                rules.pop(target, None)
+
+        return fresh
 
     async def _check_chat_rules(self, message: Message, command: str, user_id: int) -> bool:
         if not command:
             return False
 
-        rules = self.chat_rules
-
         for key in (f"user:{user_id}", f"chat:{getattr(message, 'chat_id', 0)}"):
-            allowed = rules.get(key)
+            allowed = self.rules_for(key)
 
-            if allowed and (command in allowed or "*" in allowed):
+            if command in allowed or "*" in allowed:
                 return True
 
         return False
 
-    def allow(self, target: str, command: str) -> None:
+    def allow(self, target: str, command: str, seconds: float = 0) -> None:
+        """Разрешить команду. ``seconds`` — на сколько; 0 — навсегда."""
         rules = self.chat_rules
-        allowed = list(rules.get(target, []))
-
-        if command not in allowed:
-            allowed.append(command)
-
+        allowed = dict(self.rules_for(target))
+        allowed[command] = time.time() + seconds if seconds else 0
         rules[target] = allowed
 
     def disallow(self, target: str, command: str) -> None:
         rules = self.chat_rules
-        allowed = [item for item in rules.get(target, []) if item != command]
+        allowed = dict(self.rules_for(target))
+        allowed.pop(command, None)
 
         if allowed:
             rules[target] = allowed

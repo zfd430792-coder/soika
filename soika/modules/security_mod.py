@@ -3,6 +3,7 @@
 # meta banner: https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/security_banner.png
 
 import contextlib
+import time
 
 from .. import loader, security, utils
 
@@ -44,6 +45,19 @@ class SecurityMod(loader.Module):
         "rule_chat": "💬 чат <code>{}</code>",
         "this_chat": "<b>всем в этом чате</b>",
         "all_commands": "все команды",
+        "forever": "навсегда",
+        "for_time": "на {}",
+        "until": " · осталось {}",
+        "bounding": (
+            "🔒 <b>Потолок прав</b>\n\n"
+            "<i>Что бы ни просил модуль, выше этого команда не поднимется.</i>\n"
+            "<b>Сейчас:</b> {}"
+        ),
+        "mask_panel": (
+            "🪶 <b>Права команды</b> <code>{}</code>\n\n<i>Жми кнопки — они переключают группы.</i>"
+        ),
+        "btn_reset": "♻️ Сбросить",
+        "btn_close": "✖️ Закрыть",
     }
 
     strings_en = {
@@ -78,6 +92,19 @@ class SecurityMod(loader.Module):
         "rule_chat": "💬 chat <code>{}</code>",
         "this_chat": "<b>everyone in this chat</b>",
         "all_commands": "every command",
+        "forever": "forever",
+        "for_time": "for {}",
+        "until": " · {} left",
+        "bounding": (
+            "🔒 <b>Permission ceiling</b>\n\n"
+            "<i>No command rises above this, whatever the module asks for.</i>\n"
+            "<b>Now:</b> {}"
+        ),
+        "mask_panel": (
+            "🪶 <b>Permissions of</b> <code>{}</code>\n\n<i>Tap the buttons to toggle groups.</i>"
+        ),
+        "btn_reset": "♻️ Reset",
+        "btn_close": "✖️ Close",
     }
 
     @property
@@ -128,6 +155,13 @@ class SecurityMod(loader.Module):
         prefix = self.client.dispatcher.prefixes[0]
 
         if not args:
+            if self._inline_ready() and await self.inline.form(
+                self.strings["bounding"].format(security.describe(self.manager.bounding_mask)),
+                message=message,
+                reply_markup=self._bounding_markup(),
+            ):
+                return
+
             await self._overview(message)
             return
 
@@ -139,6 +173,14 @@ class SecurityMod(loader.Module):
             return
 
         if len(args) == 1:
+            # Как у Hikka: панель с кнопками-переключателями, текст — если бота нет
+            if self._inline_ready() and await self.inline.form(
+                self.strings["mask_panel"].format(name),
+                message=message,
+                reply_markup=self._mask_markup(name),
+            ):
+                return
+
             await utils.answer(
                 message,
                 self.strings["mask"].format(
@@ -176,7 +218,7 @@ class SecurityMod(loader.Module):
     @loader.owner
     @loader.command()
     async def allowcmd(self, message):
-        """<команда> [реплай|id|чат] — разрешить команду человеку или в чате"""
+        """<команда> [реплай|id|чат] [время] — разрешить команду"""
         await self._rule(message, allow=True)
 
     @loader.owner
@@ -191,14 +233,20 @@ class SecurityMod(loader.Module):
         """— кому и что разрешено точечно"""
         lines = []
 
-        for key, commands in sorted(self.manager.chat_rules.items()):
+        now = time.time()
+
+        for key in sorted(self.manager.chat_rules):
             kind, _, ident = key.partition(":")
             title = self.strings["rule_chat" if kind == "chat" else "rule_user"].format(ident)
-            shown = " ".join(
-                self.strings["all_commands"] if command == "*" else command
-                for command in sorted(commands)
-            )
-            lines.append(f"▫️ {title}: <code>{shown}</code>")
+
+            for command, until in sorted(self.manager.rules_for(key).items()):
+                shown = self.strings["all_commands"] if command == "*" else command
+                left = (
+                    self.strings["until"].format(utils.format_timedelta(int(until - now)))
+                    if until
+                    else ""
+                )
+                lines.append(f"▫️ {title}: <code>{shown}</code>{left}")
 
         await utils.answer(
             message,
@@ -225,7 +273,13 @@ class SecurityMod(loader.Module):
 
             command = name
 
-        target = await self._resolve_target(message, args[1:])
+        rest = list(args[1:])
+        seconds = self._parse_time(rest[-1]) if rest else 0
+
+        if seconds:
+            rest.pop()
+
+        target = await self._resolve_target(message, rest)
 
         if target is None:
             await utils.answer(message, self.strings["rule_usage"].format(prefix))
@@ -234,15 +288,32 @@ class SecurityMod(loader.Module):
         key, title = target
 
         if allow:
-            self.manager.allow(key, command)
+            self.manager.allow(key, command, seconds)
         else:
             self.manager.disallow(key, command)
 
         shown = self.strings["all_commands"] if command == "*" else command
+        note = (
+            self.strings["for_time"].format(utils.format_timedelta(int(seconds)))
+            if seconds
+            else self.strings["forever"]
+        )
         await utils.answer(
             message,
-            self.strings["rule_added" if allow else "rule_removed"].format(shown, title),
+            self.strings["rule_added" if allow else "rule_removed"].format(shown, title)
+            + (f" · {note}" if allow else ""),
         )
+
+    @staticmethod
+    def _parse_time(value: str) -> float:
+        """«30m», «2h», «7d» → секунды. Не время — 0."""
+        units = {"m": 60, "м": 60, "h": 3600, "ч": 3600, "d": 86400, "д": 86400}
+        value = value.strip().lower()
+
+        if len(value) < 2 or value[-1] not in units or not value[:-1].isdigit():
+            return 0
+
+        return int(value[:-1]) * units[value[-1]]
 
     async def _resolve_target(self, message, args: list) -> tuple | None:
         """Кому выдаём: человеку из реплая, по id/нику — или всему чату."""
@@ -266,6 +337,91 @@ class SecurityMod(loader.Module):
                 return f"user:{user.id}", utils.escape_html(utils.get_display_name(user))
 
         return None
+
+    # ------------------------------------------------------------------ #
+    #  Панели с кнопками
+    # ------------------------------------------------------------------ #
+    def _inline_ready(self) -> bool:
+        return self.inline is not None and self.inline.init_complete
+
+    def _mask_markup(self, command: str) -> list:
+        """Кнопка на каждую группу прав: нажал — включилась или выключилась."""
+        _, func = self.allmodules.dispatch(command)
+        mask = self.manager.mask_for(command, func)
+
+        buttons = [
+            {
+                "text": f"{'✅' if mask & bit else '🚫'} {security.TITLES[bit]}",
+                "callback": self._toggle_bit,
+                "args": (command, name),
+            }
+            for name, bit in security.BITS.items()
+        ]
+
+        return [
+            *utils.chunks(buttons, 2),
+            [
+                {
+                    "text": self.strings["btn_reset"],
+                    "callback": self._reset_mask,
+                    "args": (command,),
+                },
+                {"text": self.strings["btn_close"], "callback": self._close},
+            ],
+        ]
+
+    async def _toggle_bit(self, call, command: str, group: str) -> None:
+        _, func = self.allmodules.dispatch(command)
+        mask = self.manager.mask_for(command, func) ^ security.BITS[group]
+
+        self.manager.set_mask(command, mask)
+        await call.answer(security.describe(mask))
+        await call.edit(
+            self.strings["mask_panel"].format(command),
+            reply_markup=self._mask_markup(command),
+        )
+
+    async def _reset_mask(self, call, command: str) -> None:
+        self.manager.reset_mask(command)
+        await call.answer(self.strings["mask_reset"].format(command))
+        await call.edit(
+            self.strings["mask_panel"].format(command),
+            reply_markup=self._mask_markup(command),
+        )
+
+    def _bounding_markup(self) -> list:
+        """Потолок прав — те же группы, но общие для всех команд."""
+        mask = self.manager.bounding_mask
+
+        buttons = [
+            {
+                "text": f"{'✅' if mask & bit else '🚫'} {security.TITLES[bit]}",
+                "callback": self._toggle_bounding,
+                "args": (name,),
+            }
+            for name, bit in security.BITS.items()
+        ]
+
+        return [
+            *utils.chunks(buttons, 2),
+            [{"text": self.strings["btn_close"], "callback": self._close}],
+        ]
+
+    async def _toggle_bounding(self, call, group: str) -> None:
+        mask = self.manager.bounding_mask ^ security.BITS[group]
+
+        # Владельца из потолка не выкидываем — иначе своими же руками себя запрёшь
+        mask |= security.OWNER
+
+        self.manager.set_bounding_mask(mask)
+        await call.answer(security.describe(mask))
+        await call.edit(
+            self.strings["bounding"].format(security.describe(mask)),
+            reply_markup=self._bounding_markup(),
+        )
+
+    async def _close(self, call) -> None:
+        await call.delete()
 
     async def _overview(self, message) -> None:
         masks = self.manager.masks
