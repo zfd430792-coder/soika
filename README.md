@@ -179,11 +179,15 @@ venv/bin/python -m soika
 ```
 🪶 Системных: 15 · установленных: 1
 
-◾️ Бэкап: .autobackup, .backup, .backupmods, .backups, .cleardb, .restoredb, .restoremods
-◾️ Инфо: .info, .ping
-◾️ Сервер: .disk, .net, .server, .top, .watch
+◾️ Бэкап
+    .autobackup, .backup, .backupmods, .backups, .cleardb, .restoredb, .restoremods
+◾️ Инфо
+    .info, .ping
+◾️ Сервер
+    .disk, .net, .server, .top, .watch
 ...
-◽️ Погода: .weather
+◽️ Погода
+    .weather
 
 Подробнее по модулю: .help имя
 ```
