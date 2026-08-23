@@ -260,6 +260,22 @@ def unparse_entities(text: str, entities: list[typing.Any] | None) -> str:
 # --------------------------------------------------------------------------- #
 #  Ответы в чат
 # --------------------------------------------------------------------------- #
+async def remove_invocation(message: Message) -> bool:
+    """Убрать из чата сообщение с командой.
+
+    Своё сообщение мы правим на месте, поэтому текст вызова исчезает сам.
+    Чужое отредактировать нельзя — его приходится удалять, иначе в чате
+    остаётся висеть команда, а вместе с ней всё, что в ней было: например
+    ссылка на модуль из ``.dlmod``. В группе без прав на удаление ничего не
+    выйдет — тогда просто оставляем как есть.
+    """
+    with contextlib.suppress(Exception):
+        await message.delete()
+        return True
+
+    return False
+
+
 async def answer(
     message: Message | list[Message],
     response: str | typing.Any,
@@ -313,12 +329,21 @@ async def answer(
 
     kwargs.pop("reply_to", None)
 
-    return await message.respond(
+    # Ответ на чужую команду не привязываем к ней реплаем: команду мы сейчас
+    # удалим, и реплай остался бы висеть на пустом месте
+    foreign = not message.out
+
+    result = await message.respond(
         response,
         parse_mode=parse_mode,
-        reply_to=message.reply_to_msg_id or message.id,
+        reply_to=message.reply_to_msg_id or (None if foreign else message.id),
         **kwargs,
     )
+
+    if foreign:
+        await remove_invocation(message)
+
+    return result
 
 
 async def answer_file(
@@ -343,7 +368,7 @@ async def answer_file(
             message.peer_id,
             file,
             caption=caption,
-            reply_to=message.reply_to_msg_id or (None if message.out else message.id),
+            reply_to=message.reply_to_msg_id,
             **kwargs,
         )
     except Exception:
@@ -352,9 +377,7 @@ async def answer_file(
 
         raise
 
-    if message.out:
-        with contextlib.suppress(Exception):
-            await message.delete()
+    await remove_invocation(message)
 
     return result
 
@@ -596,6 +619,7 @@ __all__ = [
     "maybe_await",
     "rand",
     "remove_html",
+    "remove_invocation",
     "run_async",
     "run_sync",
     "smart_split",

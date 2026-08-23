@@ -110,7 +110,7 @@ class HelpMod(loader.Module):
         lines = []
 
         for module in modules:
-            commands = " ".join(sorted(module.commands))
+            commands = ", ".join(sorted(module.commands))
             lines.append(f"▫️ <b>{utils.escape_html(str(module.name))}</b>: <code>{commands}</code>")
 
         header = self.strings["header"].format(len(modules), len(self.allmodules.commands))
