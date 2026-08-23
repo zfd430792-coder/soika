@@ -1,6 +1,6 @@
 """Версия и брендинг Сойки."""
 
-__version__ = (1, 15, 0)
+__version__ = (1, 16, 0)
 __version_str__ = ".".join(map(str, __version__))
 
 BRAND = "Сойка"

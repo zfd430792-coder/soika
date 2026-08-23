@@ -188,6 +188,9 @@ class SecurityManager:
         if mask & SUPPORT and user_id in self.support:
             return True
 
+        if self.sgroup_allows(user_id, command, func):
+            return True
+
         if message is None:
             return False
 
@@ -249,6 +252,81 @@ class SecurityManager:
             return await message.get_chat()
 
         return None
+
+    # -- именованные группы ------------------------------------------------ #
+    @property
+    def sgroups(self) -> dict[str, dict]:
+        """``{"модеры": {"users": [123], "commands": ["ban"], "modules": ["NotesMod"]}}``.
+
+        Группа — это мешок «кому» и «что можно». Точечное правило (``.allow``)
+        описывает одного человека и одну команду; группа — сразу нескольких
+        человек и сразу набор команд или модулей целиком.
+        """
+        return self._db.pointer(DB_OWNER, "sgroups", {}, item_type=dict)
+
+    def sgroup(self, name: str) -> dict | None:
+        return self.sgroups.get(name)
+
+    def new_sgroup(self, name: str) -> bool:
+        """False — такая группа уже есть."""
+        groups = self.sgroups
+
+        if name in groups:
+            return False
+
+        groups[name] = {"users": [], "commands": [], "modules": []}
+        return True
+
+    def del_sgroup(self, name: str) -> bool:
+        return self.sgroups.pop(name, None) is not None
+
+    def sgroup_user(self, name: str, user_id: int) -> bool | None:
+        """Добавить или убрать человека. True — добавлен, False — убран."""
+        group = self.sgroups.get(name)
+
+        if group is None:
+            return None
+
+        users = group.setdefault("users", [])
+
+        if user_id in users:
+            users.remove(user_id)
+            return False
+
+        users.append(user_id)
+        return True
+
+    def sgroup_rule(self, name: str, kind: str, rule: str) -> bool | None:
+        """Разрешить или отобрать команду (``commands``) или модуль (``modules``)."""
+        group = self.sgroups.get(name)
+
+        if group is None:
+            return None
+
+        rules = group.setdefault(kind, [])
+
+        if rule in rules:
+            rules.remove(rule)
+            return False
+
+        rules.append(rule)
+        return True
+
+    def sgroup_allows(self, user_id: int, command: str, func: typing.Callable) -> bool:
+        """Разрешает ли человеку эту команду хоть одна из его групп."""
+        module = type(getattr(func, "__self__", None)).__name__
+
+        for group in self.sgroups.values():
+            if user_id not in (group.get("users") or []):
+                continue
+
+            if command and command in (group.get("commands") or []):
+                return True
+
+            if module in (group.get("modules") or []):
+                return True
+
+        return False
 
     # -- точечные разрешения ---------------------------------------------- #
     @property

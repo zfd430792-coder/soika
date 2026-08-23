@@ -38,6 +38,12 @@ BLACKLIST_USERS = "blacklist_users"
 DISABLED_WATCHERS = "disabled_watchers"
 SUSPENDED_UNTIL = "suspended_until"
 
+#: Кому, где и что позволено запускать в группах, минуя адресацию «@username»
+NONICK_ALL = "nonick_all"
+NONICK_USERS = "nonick_users"
+NONICK_CHATS = "nonick_chats"
+NONICK_COMMANDS = "nonick_commands"
+
 
 class CommandDispatcher:
     """Разбор префиксов, прав, фильтров и запуск обработчиков."""
@@ -86,6 +92,40 @@ class CommandDispatcher:
 
         return utils.get_chat_id(message) in chats or message.sender_id in users
 
+    def nonick_blocked(self, message: Message, command: str, *, addressed: bool) -> bool:
+        """Второй заслон после прав: где допущенному человеку можно стрелять.
+
+        Права отвечают «что ему можно», этот заслон — «и где». В общем чате
+        команда от постороннего молча пропускается, пока ты не впустишь его
+        явно: человека, чат или отдельную команду. Иначе тот, кому выдан
+        доступ, срабатывал бы на каждую точку в любой общей беседе.
+
+        В личке заслона нет, и обращение «.команда@username» его снимает —
+        там человек назвал наш аккаунт, а значит бьёт прицельно.
+        """
+        if getattr(message, "out", False) or addressed:
+            return False
+
+        if getattr(message, "is_private", False):
+            return False
+
+        if self._db.get(SETTINGS, NONICK_ALL, False):
+            return False
+
+        if message.sender_id in (self._db.get(SETTINGS, NONICK_USERS, []) or []):
+            return False
+
+        if utils.get_chat_id(message) in (self._db.get(SETTINGS, NONICK_CHATS, []) or []):
+            return False
+
+        if command in (self._db.get(SETTINGS, NONICK_COMMANDS, []) or []):
+            return False
+
+        # Точечное разрешение — тоже пропуск: ты выдал команду этому человеку
+        # сознательно, глупо требовать вдобавок вносить его сюда.
+        # Проверяем вхождение, а не значение: у бессрочного правила там ноль
+        return command not in self.security.rules_for(f"user:{message.sender_id}")
+
     def watcher_disabled(self, handler: typing.Callable, message: Message) -> bool:
         """Вотчер модуля выключен в этом чате или везде."""
         disabled = self._db.get(SETTINGS, DISABLED_WATCHERS, {}) or {}
@@ -109,8 +149,8 @@ class CommandDispatcher:
         text = getattr(message, "raw_text", None) or ""
         return any(text.startswith(prefix) for prefix in self.prefixes)
 
-    def _parse(self, message: Message) -> tuple[str, str, typing.Callable] | None:
-        """→ (префикс, имя команды, функция) либо None, если это не наша команда."""
+    def _parse(self, message: Message) -> tuple[str, str, typing.Callable, bool] | None:
+        """→ (префикс, имя, функция, адресована ли явно) либо None, если не наша."""
         text = message.raw_text or ""
 
         prefix = next((p for p in self.prefixes if text.startswith(p)), None)
@@ -129,13 +169,19 @@ class CommandDispatcher:
         if not raw_command:
             return None
 
-        # «.команда@username» — адресация конкретному аккаунту при мультиаккаунте
+        # «.команда@username» — адресация конкретному аккаунту при мультиаккаунте.
+        # Она же служит пропуском в группах: обратились именно к нам, значит
+        # человек знает, что делает, и заслон nonick его не касается
+        addressed = False
+
         if "@" in raw_command:
             raw_command, _, target = raw_command.partition("@")
             username = getattr(self._client.soika_me, "username", None) or ""
 
             if target.lower() not in {username.lower(), str(self._client.tg_id)}:
                 return None
+
+            addressed = True
 
         name, func = self._modules.dispatch(raw_command)
 
@@ -146,7 +192,7 @@ class CommandDispatcher:
         if func is None:
             return None
 
-        return prefix, name, func
+        return prefix, name, func, addressed
 
     # ------------------------------------------------------------------ #
     #  Основной обработчик команд
@@ -165,7 +211,7 @@ class CommandDispatcher:
         if parsed is None:
             return
 
-        _, command, func = parsed
+        _, command, func, addressed = parsed
 
         if not await self.security.check(message, func, command=command):
             if message.out:
@@ -173,6 +219,9 @@ class CommandDispatcher:
                     message, self._translator.gettext("no_permission").format(command)
                 )
 
+            return
+
+        if self.nonick_blocked(message, command, addressed=addressed):
             return
 
         if not message.out and not self._check_ratelimit(message.sender_id):
