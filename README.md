@@ -171,6 +171,30 @@ venv/bin/python -m soika
 </details>
 
 <details>
+<summary><b>Как выглядит <code>.help</code></b></summary>
+
+Системные модули отделены от тех, что поставил сам. Каждая команда —
+отдельный блок: нажал, скопировалась одна она, вместе с префиксом.
+
+```
+🪶 Модулей: 16 · команд: 69
+
+📦 Системные · 15
+▫️ Бэкап: .autobackup, .backup, .backupmods, .backups, .cleardb, .restoredb, .restoremods
+▫️ Инфо: .info, .ping
+▫️ Сервер: .disk, .net, .server, .top, .watch
+...
+
+🧩 Установленные · 1
+▫️ Погода: .weather
+
+Подробнее по модулю: .help имя
+```
+
+`.helphide <модуль>` убирает модуль из списка, повторный вызов возвращает.
+</details>
+
+<details>
 <summary><b>Как выглядит <code>.info</code></b></summary>
 
 Под баннером, который можно поменять на свой:

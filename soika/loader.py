@@ -170,7 +170,9 @@ class InfiniteLoop:
         if not self.stop_clause or self.module_instance is None:
             return False
 
-        return bool(self.module_instance.db.get(type(self.module_instance).__name__, self.stop_clause))
+        return bool(
+            self.module_instance.db.get(type(self.module_instance).__name__, self.stop_clause)
+        )
 
     async def _run(self, *args: typing.Any, **kwargs: typing.Any) -> None:
         self.status = True
@@ -304,6 +306,23 @@ class Modules:
         path = configuration.data_root() / EXTERNAL_DIR
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+    def is_builtin(self, module: Module) -> bool:
+        """Модуль приехал вместе с Сойкой, а не поставлен пользователем.
+
+        Сверяем по каталогу, а не по подстроке в пути: ``__origin__`` у
+        встроенного всегда лежит в ``soika/modules``, а у поставленного —
+        в ``loaded_modules`` рядом с базой.
+        """
+        origin = str(getattr(module, "__origin__", ""))
+
+        if not origin:
+            return False
+
+        try:
+            return Path(origin).resolve().is_relative_to(self.builtin_dir.resolve())
+        except (OSError, RuntimeError, ValueError):
+            return False
 
     # ------------------------------------------------------------------ #
     #  Массовая регистрация
@@ -445,7 +464,14 @@ class Modules:
         """Поставить недостающие пакеты через pip. Возвращает True, если что-то встало."""
         logger.info("Ставлю зависимости модуля: %s", ", ".join(packages))
 
-        command_line = [sys.executable, "-m", "pip", "install", "--upgrade", "--disable-pip-version-check"]
+        command_line = [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--upgrade",
+            "--disable-pip-version-check",
+        ]
 
         if not in_virtualenv():
             command_line.append("--user")

@@ -161,7 +161,9 @@ class LoaderMod(loader.Module):
     async def clearmodulescmd(self, message):
         """— выгрузить и удалить все свои модули"""
         external = [
-            module for module in list(self.allmodules.modules) if not self._is_builtin(module)
+            module
+            for module in list(self.allmodules.modules)
+            if not self.allmodules.is_builtin(module)
         ]
 
         if not external:
@@ -190,7 +192,7 @@ class LoaderMod(loader.Module):
             await utils.answer(message, self.strings["not_found"].format(utils.escape_html(name)))
             return
 
-        if self._is_builtin(module):
+        if self.allmodules.is_builtin(module):
             await utils.answer(message, self.strings["builtin"])
             return
 
@@ -204,7 +206,7 @@ class LoaderMod(loader.Module):
         lines = []
 
         for module in sorted(self.allmodules.modules, key=lambda m: str(m.name).lower()):
-            mark = "📦" if self._is_builtin(module) else "🧩"
+            mark = "📦" if self.allmodules.is_builtin(module) else "🧩"
             origin = installed.get(type(module).__name__, "")
             source = f' — <a href="{origin}">источник</a>' if origin else ""
             # Каждая команда в своём <code>: по нажатию Telegram копирует
@@ -265,10 +267,6 @@ class LoaderMod(loader.Module):
                 return await response.text()
         except Exception:  # noqa: BLE001 — сеть может отвалиться, это нормально
             return None
-
-    def _is_builtin(self, module) -> bool:
-        origin = str(getattr(module, "__origin__", ""))
-        return "soika" in origin and "loaded_modules" not in origin
 
     config = loader.ModuleConfig(
         loader.ConfigValue(

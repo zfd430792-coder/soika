@@ -16,6 +16,13 @@ class HelpMod(loader.Module):
         "no_docs": "<i>Описания нет</i>",
         "no_commands": "<i>Команд у модуля нет</i>",
         "header": "🪶 <b>Модулей: {}</b> · <b>команд: {}</b>\n\n",
+        "section_core": "📦 <b>Системные</b> · <i>{}</i>",
+        "section_user": "\n🧩 <b>Установленные</b> · <i>{}</i>",
+        "no_user": (
+            "\n🧩 <b>Установленные</b>\n"
+            "<i>Своих модулей нет.</i> <code>{0}ml имя</code> <i>— из каталога,</i> "
+            "<code>{0}dlmod ссылка</code> <i>— по ссылке</i>"
+        ),
         "hint": "\n<i>Подробнее по модулю:</i> <code>{}help имя</code>",
         "developer": "\n<b>Автор:</b> {}",
         "hidden": "🙈 <b>Модуль</b> <b>{}</b> <b>скрыт из списка</b>",
@@ -28,6 +35,13 @@ class HelpMod(loader.Module):
         "no_docs": "<i>No description</i>",
         "no_commands": "<i>Module has no commands</i>",
         "header": "🪶 <b>Modules: {}</b> · <b>commands: {}</b>\n\n",
+        "section_core": "📦 <b>Built-in</b> · <i>{}</i>",
+        "section_user": "\n🧩 <b>Installed</b> · <i>{}</i>",
+        "no_user": (
+            "\n🧩 <b>Installed</b>\n"
+            "<i>Nothing installed yet.</i> <code>{0}ml name</code> <i>— from the catalog,</i> "
+            "<code>{0}dlmod link</code> <i>— by link</i>"
+        ),
         "hint": "\n<i>Details:</i> <code>{}help name</code>",
         "developer": "\n<b>Developer:</b> {}",
         "hidden": "🙈 <b>Module</b> <b>{}</b> <b>hidden from the list</b>",
@@ -107,17 +121,19 @@ class HelpMod(loader.Module):
             key=lambda module: str(module.name).lower(),
         )
 
-        lines = []
+        # Свои модули отделены от встроенных: так видно, что ты ставил сам,
+        # а что приехало с Сойкой и обновляется вместе с ней
+        core = [module for module in modules if self.allmodules.is_builtin(module)]
+        user = [module for module in modules if module not in core]
 
-        for module in modules:
-            # Каждая команда — отдельный <code>, иначе Telegram по нажатию
-            # копирует весь блок целиком, а не ту команду, на которую ткнули.
-            # Префикс внутри блока, чтобы скопированное сразу годилось к отправке
-            commands = ", ".join(
-                f"<code>{utils.escape_html(self.prefix + command)}</code>"
-                for command in sorted(module.commands)
-            )
-            lines.append(f"▫️ <b>{utils.escape_html(str(module.name))}</b>: {commands}")
+        lines = [self.strings["section_core"].format(len(core))]
+        lines += [self._line(module) for module in core]
+
+        if user:
+            lines.append(self.strings["section_user"].format(len(user)))
+            lines += [self._line(module) for module in user]
+        else:
+            lines.append(self.strings["no_user"].format(self.prefix))
 
         header = self.strings["header"].format(len(modules), len(self.allmodules.commands))
         footer = self.strings["hint"].format(self.prefix)
@@ -133,6 +149,21 @@ class HelpMod(loader.Module):
             return
 
         await utils.answer(message, pages[0])
+
+    def _line(self, module) -> str:
+        """Строка модуля со списком его команд.
+
+        Каждая команда — отдельный ``<code>``, иначе Telegram по нажатию
+        копирует весь блок целиком, а не ту команду, на которую ткнули.
+        Префикс внутри блока, чтобы скопированное сразу годилось к отправке.
+        """
+        commands = ", ".join(
+            f"<code>{utils.escape_html(self.prefix + command)}</code>"
+            for command in sorted(module.commands)
+        )
+
+        name = utils.escape_html(str(module.name))
+        return f"▫️ <b>{name}</b>: {commands}" if commands else f"▫️ <b>{name}</b>"
 
     @staticmethod
     def _paginate(lines: list[str], header: str, footer: str, limit: int = 3500) -> list[str]:
