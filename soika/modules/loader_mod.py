@@ -207,10 +207,18 @@ class LoaderMod(loader.Module):
             mark = "📦" if self._is_builtin(module) else "🧩"
             origin = installed.get(type(module).__name__, "")
             source = f' — <a href="{origin}">источник</a>' if origin else ""
-            commands = ", ".join(sorted(module.commands)) or self.strings["no_commands"]
+            # Каждая команда в своём <code>: по нажатию Telegram копирует
+            # содержимое блока целиком, а не то слово, на которое ткнули
+            prefix = self.client.dispatcher.prefixes[0]
+            commands = (
+                ", ".join(
+                    f"<code>{utils.escape_html(prefix + command)}</code>"
+                    for command in sorted(module.commands)
+                )
+                or self.strings["no_commands"]
+            )
             lines.append(
-                f"{mark} <b>{utils.escape_html(str(module.name))}</b>{source}\n"
-                f"    <code>{commands}</code>"
+                f"{mark} <b>{utils.escape_html(str(module.name))}</b>{source}\n    {commands}"
             )
 
         await utils.answer(

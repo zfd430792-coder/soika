@@ -110,8 +110,14 @@ class HelpMod(loader.Module):
         lines = []
 
         for module in modules:
-            commands = ", ".join(sorted(module.commands))
-            lines.append(f"▫️ <b>{utils.escape_html(str(module.name))}</b>: <code>{commands}</code>")
+            # Каждая команда — отдельный <code>, иначе Telegram по нажатию
+            # копирует весь блок целиком, а не ту команду, на которую ткнули.
+            # Префикс внутри блока, чтобы скопированное сразу годилось к отправке
+            commands = ", ".join(
+                f"<code>{utils.escape_html(self.prefix + command)}</code>"
+                for command in sorted(module.commands)
+            )
+            lines.append(f"▫️ <b>{utils.escape_html(str(module.name))}</b>: {commands}")
 
         header = self.strings["header"].format(len(modules), len(self.allmodules.commands))
         footer = self.strings["hint"].format(self.prefix)
