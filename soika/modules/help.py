@@ -160,23 +160,15 @@ class HelpMod(loader.Module):
         await utils.answer(message, pages[0])
 
     def _line(self, module, marker: str) -> str:
-        """Модуль и его команды.
+        """Строка модуля в общем списке — только имя.
 
-        Команды уезжают на свою строку с отступом: в одну строку с именем
-        длинный список не влезает по ширине экрана, Telegram переносит его,
-        и перенос начинается без маркера — список выглядит рваным.
+        Команды сюда не влезают: у модулей вроде Настроек их больше десятка,
+        строка переносится и список выглядит рваным. За подробностями —
+        ``.help имя``, там и описание, и что делает каждая команда.
 
-        Каждая команда — отдельный ``<code>``, иначе Telegram по нажатию
-        копирует весь блок целиком, а не ту команду, на которую ткнули.
-        Префикс внутри блока, чтобы скопированное сразу годилось к отправке.
+        Имя в ``<code>``, чтобы ткнуть и сразу вставить его в ``.help``.
         """
-        commands = ", ".join(
-            f"<code>{utils.escape_html(self.prefix + command)}</code>"
-            for command in sorted(module.commands)
-        )
-
-        name = utils.escape_html(str(module.name))
-        return f"{marker} <b>{name}</b>\n    {commands}" if commands else f"{marker} <b>{name}</b>"
+        return f"{marker} <code>{utils.escape_html(str(module.name))}</code>"
 
     @staticmethod
     def _paginate(lines: list[str], header: str, footer: str, limit: int = 3500) -> list[str]:
