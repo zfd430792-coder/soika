@@ -173,24 +173,22 @@ venv/bin/python -m soika
 <details>
 <summary><b>Как выглядит <code>.help</code></b></summary>
 
-Системные модули отделены от тех, что поставил сам. Каждая команда —
-отдельный блок: нажал, скопировалась одна она, вместе с префиксом.
+Системные модули помечены тёмным маркером и идут первыми, свои — светлым.
+Каждая команда отдельный блок: нажал, скопировалась одна она, с префиксом.
 
 ```
 🪶 Системных: 15 · установленных: 1
 
-📦 Системные
-▫️ Бэкап: .autobackup, .backup, .backupmods, .backups, .cleardb, .restoredb, .restoremods
-▫️ Инфо: .info, .ping
-▫️ Сервер: .disk, .net, .server, .top, .watch
+◾️ Бэкап: .autobackup, .backup, .backupmods, .backups, .cleardb, .restoredb, .restoremods
+◾️ Инфо: .info, .ping
+◾️ Сервер: .disk, .net, .server, .top, .watch
 ...
-
-🧩 Установленные
-▫️ Погода: .weather
+◽️ Погода: .weather
 
 Подробнее по модулю: .help имя
 ```
 
+Маркеры меняются в `.cfg` → **Справка** → `core_emoji` и `user_emoji`.
 `.helphide <модуль>` убирает модуль из списка, повторный вызов возвращает.
 </details>
 

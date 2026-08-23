@@ -16,11 +16,8 @@ class HelpMod(loader.Module):
         "no_docs": "<i>Описания нет</i>",
         "no_commands": "<i>Команд у модуля нет</i>",
         "header": "🪶 <b>Системных: {}</b> · <b>установленных: {}</b>\n\n",
-        "section_core": "📦 <b>Системные</b>",
-        "section_user": "\n🧩 <b>Установленные</b>",
         "no_user": (
-            "\n🧩 <b>Установленные</b>\n"
-            "<i>Своих модулей нет.</i> <code>{0}ml имя</code> <i>— из каталога,</i> "
+            "\n<i>Своих модулей нет.</i> <code>{0}ml имя</code> <i>— из каталога,</i> "
             "<code>{0}dlmod ссылка</code> <i>— по ссылке</i>"
         ),
         "hint": "\n<i>Подробнее по модулю:</i> <code>{}help имя</code>",
@@ -35,11 +32,8 @@ class HelpMod(loader.Module):
         "no_docs": "<i>No description</i>",
         "no_commands": "<i>Module has no commands</i>",
         "header": "🪶 <b>Built-in: {}</b> · <b>installed: {}</b>\n\n",
-        "section_core": "📦 <b>Built-in</b>",
-        "section_user": "\n🧩 <b>Installed</b>",
         "no_user": (
-            "\n🧩 <b>Installed</b>\n"
-            "<i>Nothing installed yet.</i> <code>{0}ml name</code> <i>— from the catalog,</i> "
+            "\n<i>Nothing installed yet.</i> <code>{0}ml name</code> <i>— from the catalog,</i> "
             "<code>{0}dlmod link</code> <i>— by link</i>"
         ),
         "hint": "\n<i>Details:</i> <code>{}help name</code>",
@@ -48,6 +42,21 @@ class HelpMod(loader.Module):
         "shown": "👁 <b>Module</b> <b>{}</b> <b>is back in the list</b>",
         "hidden_count": "\n<i>Hidden modules: {}</i>",
     }
+
+    config = loader.ModuleConfig(
+        loader.ConfigValue(
+            "core_emoji",
+            "◾️",
+            "Маркер системного модуля в списке .help",
+            validator=loader.validators.Emoji(),
+        ),
+        loader.ConfigValue(
+            "user_emoji",
+            "◽️",
+            "Маркер установленного модуля в списке .help",
+            validator=loader.validators.Emoji(),
+        ),
+    )
 
     @property
     def prefix(self) -> str:
@@ -126,13 +135,13 @@ class HelpMod(loader.Module):
         core = [module for module in modules if self.allmodules.is_builtin(module)]
         user = [module for module in modules if module not in core]
 
-        lines = [self.strings["section_core"]]
-        lines += [self._line(module) for module in core]
+        # Заголовков у разделов нет: счёт стоит в шапке, а к какой группе
+        # относится модуль, видно по маркеру — тёмный у системных, светлый
+        # у своих. Системные идут первыми
+        lines = [self._line(module, self.config["core_emoji"]) for module in core]
+        lines += [self._line(module, self.config["user_emoji"]) for module in user]
 
-        if user:
-            lines.append(self.strings["section_user"])
-            lines += [self._line(module) for module in user]
-        else:
+        if not user:
             lines.append(self.strings["no_user"].format(self.prefix))
 
         header = self.strings["header"].format(len(core), len(user))
@@ -150,7 +159,7 @@ class HelpMod(loader.Module):
 
         await utils.answer(message, pages[0])
 
-    def _line(self, module) -> str:
+    def _line(self, module, marker: str) -> str:
         """Строка модуля со списком его команд.
 
         Каждая команда — отдельный ``<code>``, иначе Telegram по нажатию
@@ -163,7 +172,7 @@ class HelpMod(loader.Module):
         )
 
         name = utils.escape_html(str(module.name))
-        return f"▫️ <b>{name}</b>: {commands}" if commands else f"▫️ <b>{name}</b>"
+        return f"{marker} <b>{name}</b>: {commands}" if commands else f"{marker} <b>{name}</b>"
 
     @staticmethod
     def _paginate(lines: list[str], header: str, footer: str, limit: int = 3500) -> list[str]:
