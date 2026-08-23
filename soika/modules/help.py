@@ -15,9 +15,9 @@ class HelpMod(loader.Module):
         "module": "🪶 <b>{}</b>\n{}\n\n{}",
         "no_docs": "<i>Описания нет</i>",
         "no_commands": "<i>Команд у модуля нет</i>",
-        "header": "🪶 <b>Модулей: {}</b> · <b>команд: {}</b>\n\n",
-        "section_core": "📦 <b>Системные</b> · <i>{}</i>",
-        "section_user": "\n🧩 <b>Установленные</b> · <i>{}</i>",
+        "header": "🪶 <b>Системных: {}</b> · <b>установленных: {}</b>\n\n",
+        "section_core": "📦 <b>Системные</b>",
+        "section_user": "\n🧩 <b>Установленные</b>",
         "no_user": (
             "\n🧩 <b>Установленные</b>\n"
             "<i>Своих модулей нет.</i> <code>{0}ml имя</code> <i>— из каталога,</i> "
@@ -34,9 +34,9 @@ class HelpMod(loader.Module):
         "not_found": "🔎 <b>Module</b> <code>{}</code> <b>not found</b>",
         "no_docs": "<i>No description</i>",
         "no_commands": "<i>Module has no commands</i>",
-        "header": "🪶 <b>Modules: {}</b> · <b>commands: {}</b>\n\n",
-        "section_core": "📦 <b>Built-in</b> · <i>{}</i>",
-        "section_user": "\n🧩 <b>Installed</b> · <i>{}</i>",
+        "header": "🪶 <b>Built-in: {}</b> · <b>installed: {}</b>\n\n",
+        "section_core": "📦 <b>Built-in</b>",
+        "section_user": "\n🧩 <b>Installed</b>",
         "no_user": (
             "\n🧩 <b>Installed</b>\n"
             "<i>Nothing installed yet.</i> <code>{0}ml name</code> <i>— from the catalog,</i> "
@@ -126,16 +126,16 @@ class HelpMod(loader.Module):
         core = [module for module in modules if self.allmodules.is_builtin(module)]
         user = [module for module in modules if module not in core]
 
-        lines = [self.strings["section_core"].format(len(core))]
+        lines = [self.strings["section_core"]]
         lines += [self._line(module) for module in core]
 
         if user:
-            lines.append(self.strings["section_user"].format(len(user)))
+            lines.append(self.strings["section_user"])
             lines += [self._line(module) for module in user]
         else:
             lines.append(self.strings["no_user"].format(self.prefix))
 
-        header = self.strings["header"].format(len(modules), len(self.allmodules.commands))
+        header = self.strings["header"].format(len(core), len(user))
         footer = self.strings["hint"].format(self.prefix)
 
         if hidden:

@@ -177,15 +177,15 @@ venv/bin/python -m soika
 отдельный блок: нажал, скопировалась одна она, вместе с префиксом.
 
 ```
-🪶 Модулей: 16 · команд: 69
+🪶 Системных: 15 · установленных: 1
 
-📦 Системные · 15
+📦 Системные
 ▫️ Бэкап: .autobackup, .backup, .backupmods, .backups, .cleardb, .restoredb, .restoremods
 ▫️ Инфо: .info, .ping
 ▫️ Сервер: .disk, .net, .server, .top, .watch
 ...
 
-🧩 Установленные · 1
+🧩 Установленные
 ▫️ Погода: .weather
 
 Подробнее по модулю: .help имя
