@@ -40,6 +40,9 @@ logger = logging.getLogger(__name__)
 
 CLEANUP_INTERVAL = 120
 
+#: С этого начинается id результата, которым отдаётся значение кнопки ввода
+INPUT_PREFIX = "input:"
+
 #: Раздел настроек и окно, внутри которого анонс считается дублем приветствия
 SETTINGS = "soika.settings"
 GREETING_WINDOW = 120
@@ -307,7 +310,7 @@ class InlineManager(UnitsMixin):
                 return
 
             await query.answer(
-                [self._input_card(button, value)],
+                [self._input_card(button, value, token=text.partition(" ")[0])],
                 cache_time=0,
                 is_personal=True,
             )
@@ -355,39 +358,23 @@ class InlineManager(UnitsMixin):
 
     async def _on_chosen_result(self, chosen: ChosenInlineResult) -> None:
         text = (chosen.query or "").strip()
+        result_id = chosen.result_id or ""
+        logger.debug("Выбран инлайн-результат %r по запросу %r", result_id, text)
 
-        # Значение вписали через кнопку ввода — применяем его и правим
-        # то же сообщение, под которым эта кнопка стояла
-        if found := self._find_input(text):
-            unit, button, value = found
+        # Метку кнопки ввода везём в id результата, а не только в тексте
+        # запроса: так она доезжает, даже если текст пришёл не таким, как
+        # мы его отдавали. Молчаливая потеря ввода — худший исход
+        if result_id.startswith(INPUT_PREFIX):
+            token = result_id[len(INPUT_PREFIX) :]
+            value = text.partition(" ")[2].strip()
 
-            if chosen.from_user.id != unit.owner:
-                return
+            await self._apply_input(chosen, token, value)
+            return
 
-            note = "✅ <b>Принято</b>"
-
-            try:
-                note = (
-                    await button["handler"](
-                        InlineMessage(self, unit),
-                        value,
-                        *button.get("args", ()),
-                    )
-                    or note
-                )
-            except Exception:
-                logger.exception("Обработчик ввода %s упал", button.get("text"))
-                note = "🚫 <b>Не вышло, подробности в логах</b>"
-
-            # Отправленное «Применяю…» превращаем в короткий итог: удалить
-            # инлайн-сообщение нельзя, зато можно переписать
-            if chosen.inline_message_id:
-                with contextlib.suppress(Exception):
-                    await self.bot.edit_message_text(
-                        inline_message_id=chosen.inline_message_id,
-                        text=note,
-                    )
-
+        # Тот же ввод, но метка пришла только в тексте запроса — так метили
+        # кнопки до 1.18.3, поэтому путь оставлен для уже открытых панелей
+        if self._find_input(text):
+            await self._apply_input(chosen, text.partition(" ")[0], text.partition(" ")[2].strip())
             return
 
         unit = self._units.get(chosen.result_id) or self._units.get(text)
@@ -398,12 +385,56 @@ class InlineManager(UnitsMixin):
         unit.inline_message_id = chosen.inline_message_id
         unit.ready.set()
 
-    def _input_card(self, button: dict, value: str) -> InlineQueryResultArticle:
+    async def _apply_input(self, chosen: ChosenInlineResult, token: str, value: str) -> None:
+        """Отдать вписанное значение обработчику кнопки и отчитаться о судьбе.
+
+        Отправленное «Применяю…» переписываем в любом случае — успехом,
+        ошибкой или «панель устарела». Оставлять его висеть нельзя: человек
+        не поймёт, приняли значение или потеряли.
+        """
+        found = self._find_input(f"{token} ")
+
+        if found is None:
+            logger.warning("Ввод по метке %r некуда применить — панели уже нет", token)
+            await self._say(chosen, "🚫 <b>Панель устарела</b>\n<i>Открой настройку заново</i>")
+            return
+
+        unit, button, _ = found
+
+        if chosen.from_user.id != unit.owner:
+            return
+
+        handler = button.get("handler")
+
+        if handler is None:
+            logger.warning("У кнопки ввода %r нет обработчика", button.get("text"))
+            await self._say(chosen, "🚫 <b>Этой кнопке некуда отдать значение</b>")
+            return
+
+        note = "✅ <b>Принято</b>"
+
+        try:
+            note = await handler(InlineMessage(self, unit), value, *button.get("args", ())) or note
+        except Exception:
+            logger.exception("Обработчик ввода %s упал", button.get("text"))
+            note = "🚫 <b>Не вышло, подробности в</b> <code>.logs error</code>"
+
+        await self._say(chosen, note)
+
+    async def _say(self, chosen: ChosenInlineResult, text: str) -> None:
+        """Переписать отправленное сообщение: удалить инлайн-сообщение нельзя."""
+        if not chosen.inline_message_id:
+            return
+
+        with contextlib.suppress(Exception):
+            await self.bot.edit_message_text(inline_message_id=chosen.inline_message_id, text=text)
+
+    def _input_card(self, button: dict, value: str, *, token: str) -> InlineQueryResultArticle:
         """Карточка «отправить, чтобы применить» для кнопки ввода."""
         title = button.get("input") or "Новое значение"
 
         return InlineQueryResultArticle(
-            id=utils.rand(10),
+            id=f"{INPUT_PREFIX}{token}",
             title=str(title),
             description=value or "Напиши значение после метки",
             input_message_content=InputTextMessageContent(
