@@ -43,6 +43,12 @@ CLEANUP_INTERVAL = 120
 #: С этого начинается id результата, которым отдаётся значение кнопки ввода
 INPUT_PREFIX = "input:"
 
+#: Метка в тексте сообщения, которым значение доезжает до юзербота. Само
+#: сообщение живёт долю секунды: его удаляет вотчер в модуле «Бот» — так же
+#: было устроено у Hikka. Если обработчик перепишет текст на ошибку, метка
+#: пропадёт, и сообщение останется висеть с объяснением
+INPUT_MARKER = "Это сообщение сейчас исчезнет"
+
 #: Раздел настроек и окно, внутри которого анонс считается дублем приветствия
 SETTINGS = "soika.settings"
 GREETING_WINDOW = 120
@@ -388,9 +394,9 @@ class InlineManager(UnitsMixin):
     async def _apply_input(self, chosen: ChosenInlineResult, token: str, value: str) -> None:
         """Отдать вписанное значение обработчику кнопки и отчитаться о судьбе.
 
-        Отправленное «Применяю…» переписываем в любом случае — успехом,
-        ошибкой или «панель устарела». Оставлять его висеть нельзя: человек
-        не поймёт, приняли значение или потеряли.
+        Удачный исход ничего не пишет: новое значение видно в самой панели,
+        а служебное сообщение исчезнет само. Голос подаём только когда
+        значение не дошло — иначе человек не поймёт, что случилось.
         """
         found = self._find_input(f"{token} ")
 
@@ -411,15 +417,15 @@ class InlineManager(UnitsMixin):
             await self._say(chosen, "🚫 <b>Этой кнопке некуда отдать значение</b>")
             return
 
-        note = "✅ <b>Принято</b>"
-
         try:
-            note = await handler(InlineMessage(self, unit), value, *button.get("args", ())) or note
+            await handler(InlineMessage(self, unit), value, *button.get("args", ()))
         except Exception:
             logger.exception("Обработчик ввода %s упал", button.get("text"))
-            note = "🚫 <b>Не вышло, подробности в</b> <code>.logs error</code>"
+            await self._say(chosen, "🚫 <b>Не вышло, подробности в</b> <code>.logs error</code>")
+            return
 
-        await self._say(chosen, note)
+        # Молча: значение уже видно в самой панели, а служебное сообщение
+        # уберёт вотчер. Пишем только когда что-то пошло не так
 
     async def _say(self, chosen: ChosenInlineResult, text: str) -> None:
         """Переписать отправленное сообщение: удалить инлайн-сообщение нельзя."""
@@ -438,7 +444,7 @@ class InlineManager(UnitsMixin):
             title=str(title),
             description=value or "Напиши значение после метки",
             input_message_content=InputTextMessageContent(
-                message_text=f"{BRAND_EMOJI} <b>Применяю…</b>",
+                message_text=f"{BRAND_EMOJI} <i>{INPUT_MARKER}</i>",
                 parse_mode="HTML",
             ),
         )

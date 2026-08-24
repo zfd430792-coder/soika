@@ -9,7 +9,7 @@ import os
 import tempfile
 
 from .. import loader, utils
-from ..inline.core import LANG_CALLBACK, MENU_CALLBACK, SETTINGS_CALLBACK
+from ..inline.core import INPUT_MARKER, LANG_CALLBACK, MENU_CALLBACK, SETTINGS_CALLBACK
 
 SETTINGS = "soika.settings"
 
@@ -338,3 +338,29 @@ class BotMod(loader.Module):
 
         with contextlib.suppress(Exception):
             await self.client.send_read_acknowledge(BOTFATHER)
+
+    # ------------------------------------------------------------------ #
+    #  Уборка за кнопками ввода
+    # ------------------------------------------------------------------ #
+    @loader.watcher("out", "only_inline", contains=INPUT_MARKER)
+    async def input_cleanup(self, message):
+        """Убрать служебное сообщение, которым значение доехало до юзербота.
+
+        Кнопка ввода отправляет его от твоего имени — иначе значение до нас
+        не добралось бы. Показывать его незачем: новое значение и так видно
+        в панели. Бот удалить инлайн-сообщение не может, а юзербот может —
+        оно его собственное. Так же было устроено у Hikka.
+
+        Ждём секунду: если значение не приняли, обработчик перепишет текст
+        на объяснение, метка пропадёт — и такое сообщение оставляем.
+        """
+        if self.inline is None or message.via_bot_id != self.inline.bot_id:
+            return
+
+        await asyncio.sleep(1.5)
+
+        with contextlib.suppress(Exception):
+            fresh = await self.client.get_messages(message.peer_id, ids=message.id)
+
+            if fresh is not None and INPUT_MARKER in (fresh.raw_text or ""):
+                await fresh.delete()
