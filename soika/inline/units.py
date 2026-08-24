@@ -223,11 +223,15 @@ class UnitsMixin:
             for column, button in enumerate(row):
                 if url := button.get("url"):
                     line.append(InlineKeyboardButton(text=button["text"], url=url))
-                elif (query := button.get("input")) is not None:
+                elif button.get("input") is not None:
+                    # Кнопка вставляет «@бот <метка> » в поле ввода того чата,
+                    # где стоит сообщение: значение пишется на месте, а не в
+                    # личке бота. Метку ловим в chosen_inline_result
+                    button.setdefault("_switch", utils.rand(10))
                     line.append(
                         InlineKeyboardButton(
                             text=button["text"],
-                            switch_inline_query_current_chat=str(query),
+                            switch_inline_query_current_chat=f"{button['_switch']} ",
                         )
                     )
                 elif data := button.get("data"):

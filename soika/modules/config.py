@@ -2,7 +2,9 @@
 
 # meta banner: https://raw.githubusercontent.com/zfd430792-coder/soika/main/assets/config_banner.png
 
-from .. import loader, utils
+import contextlib
+
+from .. import loader, utils, validators
 from ..inline.types import InlineCall
 from ..validators import ValidationError
 
@@ -23,7 +25,6 @@ class ConfigMod(loader.Module):
             "<b>По умолчанию:</b> <code>{}</code>\n"
             "<b>Формат:</b> <i>{}</i>"
         ),
-        "waiting": ("✏️ <b>Пришли новое значение для</b> <code>{}</code> <b>в личку боту</b> @{}"),
         "saved": "✅ <b>{} → {}</b> = <code>{}</code>",
         "invalid": "🚫 <b>{}</b>",
         "reset": "♻️ <b>{} → {}</b> сброшено к значению по умолчанию",
@@ -43,7 +44,6 @@ class ConfigMod(loader.Module):
             "<b>Default:</b> <code>{}</code>\n"
             "<b>Format:</b> <i>{}</i>"
         ),
-        "waiting": "✏️ <b>Send the new value for</b> <code>{}</code> <b>to</b> @{}",
         "saved": "✅ <b>{} → {}</b> = <code>{}</code>",
         "invalid": "🚫 <b>{}</b>",
         "reset": "♻️ <b>{} → {}</b> reset to default",
@@ -170,19 +170,13 @@ class ConfigMod(loader.Module):
                 utils.escape_html(validator.doc["ru"] if validator else "любое значение"),
             ),
             reply_markup=[
+                *self._value_buttons(module, module_name, option),
                 [
-                    {
-                        "text": "✏️ Изменить",
-                        "callback": self._request_value,
-                        "args": (module_name, option),
-                    },
                     {
                         "text": "♻️ Сбросить",
                         "callback": self._reset_value,
                         "args": (module_name, option),
                     },
-                ],
-                [
                     {
                         "text": "⬅️ Назад",
                         "callback": self._open_module,
@@ -193,52 +187,125 @@ class ConfigMod(loader.Module):
             ],
         )
 
-    async def _request_value(self, call: InlineCall, module_name: str, option: str) -> None:
-        async def receive(bot_message) -> None:
-            await self._apply(call, module_name, option, bot_message.text)
+    # ------------------------------------------------------------------ #
+    #  Управление значением — по типу настройки
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _unwrap(validator):
+        """Из ``Union(NoneType(), Link())`` достать то, что задаёт вид значения."""
+        inner = getattr(validator, "validators", None)
 
-        self.inline.set_fsm_state(self.client.tg_id, {"callback": receive})
+        if not inner:
+            return validator
 
-        await call.edit(
-            self.strings["waiting"].format(option, self.inline.bot_username),
-            reply_markup=[
-                {"text": "⬅️ Отмена", "callback": self._open_option, "args": (module_name, option)}
-            ],
-        )
+        for candidate in inner:
+            if not isinstance(candidate, validators.NoneType):
+                return candidate
 
-    async def _apply(self, call: InlineCall, module_name: str, option: str, value: str) -> None:
+        return validator
+
+    def _value_buttons(self, module, module_name: str, option: str) -> list[list[dict]]:
+        """Кнопки под значением.
+
+        Выключатель, выбор из списка и набор переключаются нажатием — писать
+        ничего не нужно. Для остальных типов кнопка ввода: она подставляет
+        запрос в поле того чата, где открыта панель, и значение уходит
+        оттуда же. В личку бота ходить не надо.
+        """
+        validator = self._unwrap(module.config.getvalidator(option))
+        current = module.config[option]
+
+        if isinstance(validator, validators.Boolean):
+            return [
+                [
+                    self._set_button(
+                        "✅ Включено" if current else "Включить", True, module_name, option
+                    ),
+                    self._set_button(
+                        "Выключить" if current else "🚫 Выключено", False, module_name, option
+                    ),
+                ]
+            ]
+
+        if isinstance(validator, validators.Choice):
+            buttons = [
+                self._set_button(
+                    f"{'✅ ' if value == current else ''}{value}", value, module_name, option
+                )
+                for value in validator.possible_values
+            ]
+            return utils.chunks(buttons, 2)
+
+        if isinstance(validator, validators.MultiChoice):
+            chosen = list(current or [])
+            buttons = [
+                self._set_button(
+                    f"{'✅ ' if value in chosen else '▫️ '}{value}",
+                    [item for item in chosen if item != value]
+                    if value in chosen
+                    else [*chosen, value],
+                    module_name,
+                    option,
+                )
+                for value in validator.choice.possible_values
+            ]
+            return utils.chunks(buttons, 2)
+
+        return [[self._input_button(module, module_name, option)]]
+
+    def _set_button(self, text: str, value, module_name: str, option: str) -> dict:
+        return {
+            "text": text,
+            "callback": self._set_value,
+            "args": (module_name, option, value),
+        }
+
+    def _input_button(self, module, module_name: str, option: str) -> dict:
+        return {
+            "text": "✏️ Вписать значение",
+            "input": f"{module.name} → {option}",
+            "handler": self._apply_input,
+            "args": (module_name, option),
+        }
+
+    async def _set_value(self, call: InlineCall, module_name: str, option: str, value) -> None:
+        """Значение выбрано кнопкой — сохраняем и перерисовываем ту же карточку."""
         module = self.lookup(module_name)
 
         if module is None:
+            await call.answer("Модуль пропал")
             return
 
         try:
             module.config[option] = value
         except ValidationError as e:
-            await call.edit(
-                self.strings["invalid"].format(utils.escape_html(str(e))),
-                reply_markup=[
-                    {
-                        "text": "⬅️ Назад",
-                        "callback": self._open_option,
-                        "args": (module_name, option),
-                    }
-                ],
-            )
+            await call.answer(str(e), show_alert=True)
             return
 
         self.allmodules.save_config(module)
+        await self._open_option(call, module_name, option)
 
-        await call.edit(
-            self.strings["saved"].format(
-                utils.escape_html(str(module.name)),
-                utils.escape_html(option),
-                utils.escape_html(str(module.config[option])),
-            ),
-            reply_markup=[
-                {"text": "⬅️ Назад", "callback": self._open_module, "args": (module_name,)},
-                {"text": "🗑 Закрыть", "callback": self._close},
-            ],
+    async def _apply_input(self, message, value: str, module_name: str, option: str) -> str:
+        """Значение вписали через кнопку ввода. Возвращаем короткий итог."""
+        module = self.lookup(module_name)
+
+        if module is None:
+            return "🚫 <b>Модуль пропал</b>"
+
+        try:
+            module.config[option] = value
+        except ValidationError as e:
+            return self.strings["invalid"].format(utils.escape_html(str(e)))
+
+        self.allmodules.save_config(module)
+
+        with contextlib.suppress(Exception):
+            await self._open_option(message, module_name, option)
+
+        return self.strings["saved"].format(
+            utils.escape_html(str(module.name)),
+            utils.escape_html(option),
+            utils.escape_html(str(module.config[option])),
         )
 
     async def _reset_value(self, call: InlineCall, module_name: str, option: str) -> None:

@@ -27,7 +27,13 @@ from telethon.tl.functions.contacts import UnblockRequest
 from .. import configuration, utils
 from ..version import BRAND, BRAND_EMOJI, DEFAULT_REPO, MODULES_REPO, __version_str__
 from . import token as token_tools
-from .types import BotCreationError, InlineCall, InlineUnit, normalize_buttons
+from .types import (
+    BotCreationError,
+    InlineCall,
+    InlineMessage,
+    InlineUnit,
+    normalize_buttons,
+)
 from .units import NAV_CLOSE, NAV_NEXT, NAV_NOOP, NAV_PREV, UnitsMixin
 
 logger = logging.getLogger(__name__)
@@ -255,8 +261,42 @@ class InlineManager(UnitsMixin):
         self.dp.message.register(self._on_start, CommandStart())
         self.dp.message.register(self._on_message)
 
+    def _find_input(self, text: str) -> tuple[InlineUnit, dict, str] | None:
+        """Найти кнопку ввода по метке в начале запроса.
+
+        Кнопка с ``input`` вставляет в поле ввода свою метку. Значит запрос
+        вида «<метка> новое значение» адресован именно ей — возвращаем юнит,
+        саму кнопку и то, что человек напечатал после метки.
+        """
+        token, _, value = text.partition(" ")
+
+        if not token:
+            return None
+
+        for unit in self._units.values():
+            for row in unit.buttons:
+                for button in row:
+                    if button.get("_switch") == token and button.get("handler"):
+                        return unit, button, value.strip()
+
+        return None
+
     async def _on_inline_query(self, query: InlineQuery) -> None:
         text = (query.query or "").strip()
+
+        if found := self._find_input(text):
+            unit, button, value = found
+
+            if query.from_user.id != unit.owner:
+                await query.answer([], cache_time=0, is_personal=True)
+                return
+
+            await query.answer(
+                [self._input_card(button, value)],
+                cache_time=0,
+                is_personal=True,
+            )
+            return
 
         if unit := self._units.get(text):
             if query.from_user.id != unit.owner:
@@ -299,13 +339,63 @@ class InlineManager(UnitsMixin):
         return True
 
     async def _on_chosen_result(self, chosen: ChosenInlineResult) -> None:
-        unit = self._units.get(chosen.result_id) or self._units.get((chosen.query or "").strip())
+        text = (chosen.query or "").strip()
+
+        # Значение вписали через кнопку ввода — применяем его и правим
+        # то же сообщение, под которым эта кнопка стояла
+        if found := self._find_input(text):
+            unit, button, value = found
+
+            if chosen.from_user.id != unit.owner:
+                return
+
+            note = "✅ <b>Принято</b>"
+
+            try:
+                note = (
+                    await button["handler"](
+                        InlineMessage(self, unit),
+                        value,
+                        *button.get("args", ()),
+                    )
+                    or note
+                )
+            except Exception:
+                logger.exception("Обработчик ввода %s упал", button.get("text"))
+                note = "🚫 <b>Не вышло, подробности в логах</b>"
+
+            # Отправленное «Применяю…» превращаем в короткий итог: удалить
+            # инлайн-сообщение нельзя, зато можно переписать
+            if chosen.inline_message_id:
+                with contextlib.suppress(Exception):
+                    await self.bot.edit_message_text(
+                        inline_message_id=chosen.inline_message_id,
+                        text=note,
+                    )
+
+            return
+
+        unit = self._units.get(chosen.result_id) or self._units.get(text)
 
         if unit is None:
             return
 
         unit.inline_message_id = chosen.inline_message_id
         unit.ready.set()
+
+    def _input_card(self, button: dict, value: str) -> InlineQueryResultArticle:
+        """Карточка «отправить, чтобы применить» для кнопки ввода."""
+        title = button.get("input") or "Новое значение"
+
+        return InlineQueryResultArticle(
+            id=utils.rand(10),
+            title=str(title),
+            description=value or "Напиши значение после метки",
+            input_message_content=InputTextMessageContent(
+                message_text=f"{BRAND_EMOJI} <b>Применяю…</b>",
+                parse_mode="HTML",
+            ),
+        )
 
     async def _on_callback(self, call: CallbackQuery) -> None:
         data = call.data or ""
