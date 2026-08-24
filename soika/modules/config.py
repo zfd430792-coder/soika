@@ -23,10 +23,7 @@ class ConfigMod(loader.Module):
             "<b>По умолчанию:</b> <code>{}</code>\n"
             "<b>Формат:</b> <i>{}</i>"
         ),
-        "waiting": (
-            "✏️ <b>Пришли новое значение для</b> <code>{}</code> "
-            "<b>в личку боту</b> @{}"
-        ),
+        "waiting": ("✏️ <b>Пришли новое значение для</b> <code>{}</code> <b>в личку боту</b> @{}"),
         "saved": "✅ <b>{} → {}</b> = <code>{}</code>",
         "invalid": "🚫 <b>{}</b>",
         "reset": "♻️ <b>{} → {}</b> сброшено к значению по умолчанию",
@@ -132,6 +129,14 @@ class ConfigMod(loader.Module):
             self.strings["choose_module"],
             reply_markup=self._module_buttons(self._configurable()),
         )
+
+    async def open_module(self, call: InlineCall, module_name: str) -> None:
+        """Открыть настройки модуля из чужой карточки — например из .help.
+
+        Публичный вход в ту же панель, что рисует ``.cfg имя``: кнопка в
+        справке не должна повторять её разметку у себя.
+        """
+        await self._open_module(call, module_name)
 
     async def _open_module(self, call: InlineCall, module_name: str) -> None:
         module = self.lookup(module_name)
