@@ -25,6 +25,9 @@ class ConfigMod(loader.Module):
             "<b>По умолчанию:</b> <code>{}</code>\n"
             "<b>Формат:</b> <i>{}</i>"
         ),
+        "by_command": (
+            "\n\n<i>Или из любого чата, своим сообщением:</i>\n<code>{}setcfg {} {} значение</code>"
+        ),
         "saved": "✅ <b>{} → {}</b> = <code>{}</code>",
         "invalid": "🚫 <b>{}</b>",
         "reset": "♻️ <b>{} → {}</b> сброшено к значению по умолчанию",
@@ -43,6 +46,9 @@ class ConfigMod(loader.Module):
             "<b>Current:</b> <code>{}</code>\n"
             "<b>Default:</b> <code>{}</code>\n"
             "<b>Format:</b> <i>{}</i>"
+        ),
+        "by_command": (
+            "\n\n<i>Or from any chat, as your own message:</i>\n<code>{}setcfg {} {} value</code>"
         ),
         "saved": "✅ <b>{} → {}</b> = <code>{}</code>",
         "invalid": "🚫 <b>{}</b>",
@@ -160,15 +166,26 @@ class ConfigMod(loader.Module):
         config = module.config
         validator = config.getvalidator(option)
 
+        text = self.strings["option"].format(
+            utils.escape_html(str(module.name)),
+            utils.escape_html(option),
+            utils.escape_html(config.getdoc(option)),
+            utils.escape_html(str(config[option])),
+            utils.escape_html(str(config.getdef(option))),
+            utils.escape_html(validator.doc["ru"] if validator else "любое значение"),
+        )
+
+        # Кнопка ввода работает не везде: в каналах и группах, где запрещены
+        # инлайн-боты, она бесполезна. Поэтому рядом всегда лежит готовая
+        # команда — её можно отправить своим сообщением из любого чата
+        text += self.strings["by_command"].format(
+            self.client.dispatcher.prefixes[0],
+            utils.escape_html(str(module.name)),
+            utils.escape_html(option),
+        )
+
         await call.edit(
-            self.strings["option"].format(
-                utils.escape_html(str(module.name)),
-                utils.escape_html(option),
-                utils.escape_html(config.getdoc(option)),
-                utils.escape_html(str(config[option])),
-                utils.escape_html(str(config.getdef(option))),
-                utils.escape_html(validator.doc["ru"] if validator else "любое значение"),
-            ),
+            text,
             reply_markup=[
                 *self._value_buttons(module, module_name, option),
                 [
