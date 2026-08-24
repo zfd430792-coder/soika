@@ -124,6 +124,10 @@ class InlineManager(UnitsMixin):
         self.init_complete = False
 
         self._units: dict[str, InlineUnit] = {}
+        #: Метка кнопки ввода → (юнит, сама кнопка). Держим отдельно от юнита:
+        #: при перерисовке его кнопки подменяются новыми словарями, а человек
+        #: в это время уже печатает значение — по старой метке
+        self._inputs: dict[str, tuple[str, dict]] = {}
         self._fsm: dict[int, dict] = {}
         self._polling: asyncio.Task | None = None
         self._cleaner: asyncio.Task | None = None
@@ -250,6 +254,12 @@ class InlineManager(UnitsMixin):
             for unit in [unit for unit in self._units.values() if unit.expired]:
                 await self.close_unit(unit, delete_message=False)
 
+            # Метки ввода живут ровно столько, сколько их юнит
+            alive = set(self._units)
+            self._inputs = {
+                token: entry for token, entry in self._inputs.items() if entry[0] in alive
+            }
+
     # ------------------------------------------------------------------ #
     #  Обработчики бота
     # ------------------------------------------------------------------ #
@@ -265,21 +275,26 @@ class InlineManager(UnitsMixin):
         """Найти кнопку ввода по метке в начале запроса.
 
         Кнопка с ``input`` вставляет в поле ввода свою метку. Значит запрос
-        вида «<метка> новое значение» адресован именно ей — возвращаем юнит,
-        саму кнопку и то, что человек напечатал после метки.
+        вида «<метка> новое значение» адресован именно ей.
+
+        Ищем в реестре, а не по кнопкам юнита: пока человек печатает, панель
+        могла перерисоваться, и в юните лежат уже другие словари кнопок.
+        Раньше из-за этого ввод молча терялся.
         """
         token, _, value = text.partition(" ")
+        found = self._inputs.get(token) if token else None
 
-        if not token:
+        if found is None:
             return None
 
-        for unit in self._units.values():
-            for row in unit.buttons:
-                for button in row:
-                    if button.get("_switch") == token and button.get("handler"):
-                        return unit, button, value.strip()
+        unit_id, button = found
+        unit = self._units.get(unit_id)
 
-        return None
+        if unit is None:
+            self._inputs.pop(token, None)
+            return None
+
+        return unit, button, value.strip()
 
     async def _on_inline_query(self, query: InlineQuery) -> None:
         text = (query.query or "").strip()

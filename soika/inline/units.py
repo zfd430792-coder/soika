@@ -211,6 +211,22 @@ class UnitsMixin:
 
         return unit.photo
 
+    def remember_input(self, unit: InlineUnit, button: dict) -> str:
+        """Выдать кнопке ввода метку и запомнить её.
+
+        Реестр держим на менеджере, а не в самой кнопке: при перерисовке
+        панели её кнопки подменяются новыми словарями, а человек в это время
+        уже печатает значение — по старой метке. Так она продолжает работать.
+        """
+        token = button.get("_switch") or utils.rand(10)
+        button["_switch"] = token
+
+        if not hasattr(self, "_inputs"):
+            self._inputs: dict[str, tuple[str, dict]] = {}
+
+        self._inputs[token] = (unit.id, button)
+        return token
+
     def build_markup(self, unit: InlineUnit) -> typing.Any:
         """Собрать клавиатуру: сначала кнопки модуля, потом навигация."""
         from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -227,11 +243,10 @@ class UnitsMixin:
                     # Кнопка вставляет «@бот <метка> » в поле ввода того чата,
                     # где стоит сообщение: значение пишется на месте, а не в
                     # личке бота. Метку ловим в chosen_inline_result
-                    button.setdefault("_switch", utils.rand(10))
                     line.append(
                         InlineKeyboardButton(
                             text=button["text"],
-                            switch_inline_query_current_chat=f"{button['_switch']} ",
+                            switch_inline_query_current_chat=f"{self.remember_input(unit, button)} ",
                         )
                     )
                 elif data := button.get("data"):
