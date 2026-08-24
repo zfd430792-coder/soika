@@ -25,10 +25,7 @@ class HelpMod(loader.Module):
         "hidden": "🙈 <b>Модуль</b> <b>{}</b> <b>скрыт из списка</b>",
         "shown": "👁 <b>Модуль</b> <b>{}</b> <b>снова в списке</b>",
         "hidden_count": "\n<i>Скрыто модулей: {}</i>",
-        "btn_config": "⚙️ Настройки",
-        "btn_back": "◀️ Все модули",
-        "btn_close": "✖️ Закрыть",
-        "no_config": "У этого модуля нет настроек",
+        "has_config": "\n\n⚙️ <b>Настройки:</b> <code>{}cfg {}</code>",
     }
 
     strings_en = {
@@ -45,10 +42,7 @@ class HelpMod(loader.Module):
         "hidden": "🙈 <b>Module</b> <b>{}</b> <b>hidden from the list</b>",
         "shown": "👁 <b>Module</b> <b>{}</b> <b>is back in the list</b>",
         "hidden_count": "\n<i>Hidden modules: {}</i>",
-        "btn_config": "⚙️ Settings",
-        "btn_back": "◀️ All modules",
-        "btn_close": "✖️ Close",
-        "no_config": "This module has no settings",
+        "has_config": "\n\n⚙️ <b>Settings:</b> <code>{}cfg {}</code>",
     }
 
     config = loader.ModuleConfig(
@@ -105,24 +99,11 @@ class HelpMod(loader.Module):
         if developer := getattr(module, "__meta__", {}).get("developer"):
             text += self.strings["developer"].format(utils.escape_html(developer))
 
-        banner = utils.get_banner(module)
+        # Настройки живут в .cfg и только там: справка — это справка
+        if self._configurable(module):
+            text += self.strings["has_config"].format(self.prefix, module.name)
 
-        if self._inline_ready():
-            # Картинка уезжает, если текст не влезает в подпись: form, в отличие
-            # от send_pm_unit, длину не проверяет и молча упал бы
-            photo = (
-                banner if banner and len(utils.remove_html(text)) <= utils.CAPTION_LIMIT else None
-            )
-
-            if await self.inline.form(
-                text,
-                message=message,
-                reply_markup=self._module_markup(module),
-                photo=photo,
-            ):
-                return
-
-        await utils.answer_with_banner(message, text, banner)
+        await utils.answer_with_banner(message, text, utils.get_banner(module))
 
     def _inline_ready(self) -> bool:
         return self.inline is not None and self.inline.init_complete
@@ -131,43 +112,6 @@ class HelpMod(loader.Module):
     def _configurable(module) -> bool:
         config = getattr(module, "config", None)
         return bool(config and getattr(config, "options", None))
-
-    def _module_markup(self, module) -> list[list[dict]]:
-        """Кнопки под справкой: настройки этого модуля и возврат к списку."""
-        row = []
-
-        if self._configurable(module):
-            row.append(
-                {
-                    "text": self.strings["btn_config"],
-                    "callback": self._open_config,
-                    "args": (type(module).__name__,),
-                }
-            )
-
-        row.append({"text": self.strings["btn_back"], "callback": self._back_to_list})
-
-        return [row, [{"text": self.strings["btn_close"], "callback": self._close}]]
-
-    async def _open_config(self, call, module_name: str) -> None:
-        """Открыть панель настроек этого модуля — ту же, что даёт .cfg."""
-        panel = self.lookup("ConfigMod")
-        module = self.lookup(module_name)
-
-        if panel is None or module is None:
-            await call.answer(self.strings["no_config"])
-            return
-
-        await panel.open_module(call, module_name)
-
-    async def _back_to_list(self, call) -> None:
-        await call.edit(
-            self._overview()[0],
-            reply_markup=[[{"text": self.strings["btn_close"], "callback": self._close}]],
-        )
-
-    async def _close(self, call) -> None:
-        await call.delete()
 
     @loader.owner
     @loader.command()
